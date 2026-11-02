@@ -1,14 +1,8 @@
 """可信度、复杂问题覆盖和草稿重试的回归测试。"""
 
-from contextlib import nullcontext
 import json
-from pathlib import Path
 
 import pytest
-from streamlit.testing.v1 import AppTest
-
-import config
-import workflow
 from conftest import comparison_result, plan_result, single_result
 from models import Document, PDFPage, QuestionTask, Report
 from pdf_utils import parse_pdf
@@ -159,34 +153,6 @@ def test_retry_incomplete_report_only_reissues_comparison(settings, mock_service
     assert second.coverage_complete
     assert len(calls) == 5
     assert 'documents' in json.loads(calls[-1]['messages'][1]['content'])
-
-
-def test_ui_marks_draft_and_retry_reuses_completed_stages(monkeypatch, settings, mock_service, english_pdf, chinese_pdf):
-    documents = (parse_pdf(english_pdf, 'en.pdf', 'D1'), parse_pdf(chinese_pdf, 'zh.pdf', 'D2'))
-    draft = comparison_result()
-    draft['answers'] = []
-    service, calls = mock_service([plan_result()] + [single_result(d.pages[0].text) for d in documents]
-                                   + [draft, comparison_result()])
-    monkeypatch.setattr(config, 'load_settings', lambda: settings)
-    monkeypatch.setattr(workflow, 'LLMService', lambda cfg: nullcontext(service))
-    path = str(Path(__file__).resolve().parents[1] / 'app.py')
-    at = AppTest.from_file(path, default_timeout=15).run()
-    at.file_uploader(key='uploads').set_value([
-        ('en.pdf', english_pdf, 'application/pdf'), ('zh.pdf', chinese_pdf, 'application/pdf')]).run()
-    at.text_area(key='question').set_value('研究问题').run()
-    at.button(key='analyze').click().run()
-    assert not at.exception
-    assert not at.session_state['report'].coverage_complete
-    assert any('报告草稿' in item.value for item in at.warning)
-    assert at.button(key='analyze').label == '重试未完成回答'
-    assert not at.button(key='analyze').disabled
-    at.run()
-    assert len(calls) == 4
-    at.button(key='analyze').click().run()
-    assert not at.exception
-    assert at.session_state['report'].coverage_complete
-    assert at.button(key='analyze').disabled
-    assert len(calls) == 5
 
 
 def test_reporting_time_is_not_forced_into_new_experiment_design():

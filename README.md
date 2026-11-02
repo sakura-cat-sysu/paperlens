@@ -1,137 +1,135 @@
-# 文镜 AI · PaperLens V0
+# 文镜 AI · PaperLens
 
 让不同文献的观点，在同一面镜子里呈现。
 
-面向大学生科研场景的跨语言多文献观点分析工具。上传 2～3 篇中英文文字型 PDF，输入研究问题，生成包含独立观点、综合结论、共识、分歧、可能原因及原文证据的中文报告。没有配置模型时会提示配置，不会生成模拟报告。
+上传 2～3 篇中英文文字型 PDF，围绕研究问题生成中文分析，查看逐项回答、独立观点、共识、分歧和原文证据。文献、任务进度与报告归属个人账号，刷新浏览器后仍可继续查看。
 
-## 技术与环境
+## 技术栈
 
-- Python 3.11+，Streamlit 负责页面和业务逻辑。
-- PyMuPDF 按 PDF 物理页码提取正文和段落。
-- OpenAI Python SDK 对接兼容 Chat Completions 的服务。
-- python-dotenv 读取配置；内置 dataclass 表达结构；pytest 测试。
-- 无数据库、登录、联网检索、向量库、复杂 Agent 框架或文件导出。
+- **前端**：React、TypeScript、Vite、React Router、TanStack Query、Tailwind CSS、基于 Radix 的 shadcn 风格组件。
+- **后端**：FastAPI、Pydantic、SQLAlchemy、Alembic，Python 3.12～3.14。
+- **后台分析**：Celery + RabbitMQ，PostgreSQL 保存任务、阶段检查点和报告。
+- **文献与模型**：PyMuPDF、OpenAI Python SDK，支持 DeepSeek 等 Chat Completions 兼容服务。
+- **存储**：私有 S3 兼容对象存储，或单机持久卷；数据库保存解析正文与报告快照。
+- **部署**：Nginx + HTTPS + Docker Compose；GitHub Actions 检查 `main` 后构建并自动部署固定镜像摘要。
 
-## 安装
+架构与可靠性边界见 [架构说明](docs/architecture.md)，服务器安装、域名、证书和 CI 配置见 [部署手册](docs/deployment.md)，分析规则见 [证据与模型边界](docs/analysis.md)。
 
-在项目目录打开终端。推荐使用独立虚拟环境。
+## 本地开发
 
-macOS / Linux：
+需要 Docker Compose、Node.js 24 和 [uv](https://docs.astral.sh/uv/)。生产镜像使用 Python 3.13。
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env
+uv sync --frozen
+npm ci --prefix frontend
+docker compose -f compose.dev.yaml up -d --wait
+uv run alembic upgrade head
+uv run python -m backend.cli create-user you@example.com
 ```
 
-Windows PowerShell：
+管理员命令在终端交互读取密码，不把密码放入命令行参数。默认关闭公开注册；本地需要测试注册时可在 `.env` 设置 `ALLOW_REGISTRATION=true`。
 
-```powershell
-py -3 -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
+分别在三个终端启动：
+
+```bash
+# API
+uv run uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
+
+# 分析 Worker
+uv run celery -A backend.worker:celery worker --loglevel=WARNING --concurrency=2
+
+# 前端
+npm --prefix frontend run dev
 ```
 
-若 PowerShell 不允许激活脚本，可直接使用 `.venv\Scripts\python.exe -m pip install -r requirements.txt` 和 `.venv\Scripts\python.exe -m streamlit run app.py`。
+浏览器打开 **http://127.0.0.1:5188**。前端开发服务代理 `/api` 到本机 API，无需跨域配置。域名必须和 `APP_ORIGIN` 一致。
+
+另开终端运行派发器，负责在队列临时断连后继续投递数据库中的待执行任务：
+
+```bash
+uv run celery -A backend.worker:celery beat --loglevel=WARNING --schedule=.cache/celerybeat-schedule
+```
+
+生产使用 Compose 同时管理以上服务。终止本地基础设施时运行 `docker compose -f compose.dev.yaml stop`，保留数据库卷。
 
 ## 模型配置
 
-本版本已预设 DeepSeek 地址与模型。编辑本地 `.env`，只需填入你的 DeepSeek API Key；也可在运行应用的进程中设置同名环境变量：
+编辑 `.env`，配置服务端密钥与模型：
 
 ```dotenv
-OPENAI_API_KEY=你的DeepSeek密钥
+OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-flash
 ```
 
-`OPENAI_` 是兼容 SDK 的变量前缀，不代表使用 OpenAI 的服务或密钥；这里实际调用 DeepSeek。地址和模型名称按 [DeepSeek 官方文档](https://api-docs.deepseek.com/) 配置。
+`OPENAI_` 是兼容 SDK 的变量前缀，不代表一定调用 OpenAI。`BASE_URL` 使用 API 根地址，不追加 `/chat/completions`。系统环境变量优先于 `.env`。
 
-对 `api.deepseek.com`，应用通过 `extra_body` 明确关闭默认思考模式。问题拆解与单篇提取最多输出 4,096 tokens，包含逐项回答的综合阶段最多 8,192 tokens；调用方法参考 [DeepSeek 思考模式说明](https://api-docs.deepseek.com/guides/thinking_mode/)。不会把 DeepSeek 专用参数发送给其他服务。余额不足（HTTP 402）或参数不兼容（HTTP 422）会显示对应提示。
+DeepSeek 官方域名下明确关闭思考模式，拆解与单篇阶段最多输出 4,096 tokens，综合阶段最多 8,192 tokens；其他兼容服务不会收到这些专用参数。SDK 自动重试关闭，结构错误最多修复一次。更新配置后重启 API 和 Worker。
 
-仍可使用其他兼容服务：替换地址、模型和相应密钥即可。`OPENAI_API_KEY` 和 `OPENAI_MODEL` 必填。`OPENAI_BASE_URL` 留空时 SDK 使用默认地址；不要填完整的 `/chat/completions` 路径。模型必须支持文本 Chat Completions。
+未配置模型时，页面会明确提示，不能创建分析任务，也不会生成模拟报告。测试响应仅存在于测试与浏览器测试脚本中。
 
-系统环境变量优先于 `.env`。更新 `.env` 后可点击页面侧栏“重新读取配置”；如果修改的是启动进程的环境变量，请重启应用。页面只显示配置是否存在，不会把 API Key 发给浏览器，也不会把“配置存在”冒充连接成功。
+## 使用
 
-`.env` 已加入 `.gitignore`，`.env.example` 没有真实密钥。不要将密钥填到源代码或研究问题中。API 接入依据 [OpenAI Python SDK 官方文档](https://developers.openai.com/api/reference/python)，使用可配置的客户端地址、超时与关闭的自动重试。
+1. 登录账号，添加 PDF 到文献库，可按页检查提取正文。
+2. 新建分析，选择 2～3 篇不同文献并输入研究问题。
+3. 提交后拿到独立任务，离开或刷新页面不会重新创建任务。
+4. 任务完成后查看综合结论、逐项回答、文献观点、共识与分歧。
+5. 点击 `D1-C1` 等来源，查看引文、物理页码与整页正文。
+6. 失败任务可继续分析；草稿可重试未完成回答，复用已保存阶段。
 
-## 启动
+每篇最多 **10 MiB、50 页、100,000 个提取字符**；问题最多 2,000 字符。超限拒绝，不截断，不执行 OCR。并发任务、每日分析次数、文献库容量由服务器配置，UTC 零点重置每日额度。开始和显式重试各计一次，普通阅读与刷新不计次数。
 
-激活环境后，在包含 `app.py` 的目录运行：
+文献正文只在分析时发送给模型服务。原始文件保存在私有存储，正文、阶段结果与报告保存在数据库；第三方模型服务的保存策略由该服务决定。删除文献会删除原始 PDF 与文献库正文，历史报告保留分析快照；若要清除相关证据，需要同时删除相关报告。备份和对象版本按管理员设置的保留周期到期。
+
+## 验证
 
 ```bash
-streamlit run app.py
+# 核心测试不访问模型；API 集成测试需要独立 PostgreSQL 测试数据库。
+uv run pytest -q
+uv run ruff check backend scripts tests/test_api.py tests/test_storage.py tests/test_deployment.py
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-或使用 `python -m streamlit run app.py`。浏览器访问终端打印的地址，默认是 `http://127.0.0.1:8501`。默认仅监听本机。如果端口被占用，可使用 `streamlit run app.py --server.port=8502`。
+API 集成测试会清理 `TEST_DATABASE_URL` 指定数据库中的业务表，**只可指定独立测试库**。未提供该变量时，API 集成测试明确跳过。
 
-## 使用流程
-
-1. 上传 2～3 篇不同的 PDF；页面显示文件名、大小、页数、字符数。
-2. 展开文献卡片，按页检查提取文字。PDF 页码从 1 开始，与文件的物理页序一致。
-3. 输入中文或英文研究问题，例如“生成式 AI 是否能显著提高大学生的学习效率？”。
-4. 点击“开始智能分析”，依次完成单篇提取、引用校验、跨文献比较。
-5. 先检查“按问题逐项回答”的完成情况，再阅读综合结论、单篇观点、共识、机制差异、结论冲突、证据来源和待研究问题。
-6. 未完成的回答显示为草稿；有足够可用来源时可点击“重试未完成回答”，只重试综合阶段。普通交互不调用模型。
-
-每份文件最多 10 MiB（界面记为 10 MB）、50 页、100,000 个提取字符；超限直接拒绝，不截断。最初 V0 的 10 页 / 20,000 字符限制已根据实际论文阅读需求放宽。空白、损坏、加密、图片扫描件或明显编码异常会提示原因。不执行 OCR。含空白页的文字 PDF 保留原页码并提示。文献更长时，发送给模型的文本也更多，处理时间和 API 输入费用会相应增加。
-
-文献内容在点击分析后才会被发送给配置的模型服务。上传文件、解析结果和报告只存于当前 Streamlit 会话内，不主动写入磁盘；浏览器整页刷新、关闭会话或重启服务可能使结果丢失。第三方模型服务的保存策略由该服务决定。
-
-## 工作流与证据边界
-
-```text
-上传 PDF → 按页解析 → 拆解问题并建立任务清单
-        → 每篇提取最多 6 条原子观点 → 程序核对每条引文
-        → 仅传递全部引文匹配的观点 → 逐项回答与综合比较
-        → 核对观点 ID、结论类型和任务覆盖 → 展示报告或未完成草稿
+```bash
+export TEST_DATABASE_URL=postgresql+psycopg://paperlens:development-only@127.0.0.1:55432/paperlens_test
+export CELERY_BROKER_URL=amqp://paperlens:development-only@127.0.0.1:5673//
+uv run pytest -q
+npm --prefix frontend run test:e2e
 ```
 
-- 单篇输出包含中文观点、解释、原语言引文、物理页码和未充分涉及的问题；文献名称和 ID 由程序提供。
-- 原文校验只忽略空白和换行，严格要求片段出现在指定页；不做大小写、标点或模糊匹配。少于 8 个非空白字符的片段不作为可靠匹配依据。
-- **任意一条引用失败，整条观点及解释均标为“待复核”，不进入综合分析。** 不会只删失败引文却继续采用可能依赖它的细节。匹配片段只在待复核区域供人工查看；没有引文的观点标为“证据不足”。
-- 综合结论与逐项判断关联 `D1-C1` 等可用观点 ID；未知 ID 或引用已冻结观点的判断会被隐藏。共识、机制差异、结论冲突和差异原因至少关联两篇不同文献。
-- 判断分为“论文报告”“证据推导 / 假设”“拟议方案”三层。方案引文仅表明设计依据，不表示论文已经验证方案有效。相关性不等于事实正确概率，准确率也不等于已测量幻觉率。
-- 方法或任务差异单列“机制差异与互补性”，不冒充同一条件下的结论冲突；没有足够材料时允许分类为空。
-- 复杂问题先拆成清单，逐项显示“已回答 / 部分回答 / 未完成”。缺项、空回答、无效来源或没有提供所要求的方案时，报告显示为草稿；不能以“生成结束”冒充完成全部要求。此检查针对结构和来源，仍不能自动认证回答的科学正确性或所有语义上的遗漏。
-- 真正漏答的内容与方法的适用限制分开显示。“方案尚未实证”或“阈值需要校准”不自动等同于漏答；结果说明也不会被强制要求设计一套新实验。
-- 文献、问题和文件名在 Prompt 中被当作不可信数据，模型不得执行其内嵌指令；动态文案会转义 Markdown，原文以代码块展示。
-- **字符串匹配只说明原文存在，不代表模型解释正确或事实已被认证。** 请人工复核关键结论与证据是否相符。
+先在本地 PostgreSQL 创建 `paperlens_test` 数据库。Playwright 会启动真实 API、Worker 和前端，模型使用仅本机可见的合成响应，不产生费用。浏览器测试不复用已有服务，避免误测其他项目。首次运行需要 `cd frontend && npx playwright install --with-deps chromium`；可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指向已有 Chromium。
 
-正常分析 2 篇文献需 4 次模型请求，3 篇需 5 次（含一次问题拆解）。每个请求的非法 JSON / 结构错误最多修复一次；SDK 自动重试关闭，单次超时 60 秒。引用不匹配不会触发收费修复。同一输入的逐项回答生成后按钮禁用；展开结果、切换页码和普通重绘不调用模型。对草稿的显式重试只重新生成综合回答，复用已完成的拆解与文献结果；若不足两篇文献提供可用观点，则需要调整问题或文献。输入、文件或配置变化会清除旧结果。
+API 契约从后端生成，更新接口后运行：
 
-## 文件说明
+```bash
+npm --prefix frontend run generate:api
+```
 
-| 文件 | 作用 |
+CI 会核对生成结果，防止前后端契约漂移。容器验收可运行：
+
+```bash
+docker build -t paperlens-api:ci .
+docker build -f frontend/Dockerfile -t paperlens-web:ci .
+uv run python scripts/check_containers.py
+```
+
+脚本使用独立随机 Compose 项目，完成后清理自己创建的容器和测试卷。需保留本机 8088、55433、5674 端口供验收使用。当前实际验收结果见 [TEST_REPORT.md](TEST_REPORT.md)。
+
+## 项目结构
+
+| 目录 / 文件 | 职责 |
 | --- | --- |
-| `app.py` | 中文界面、上传、进度、会话状态、结果与证据展示 |
-| `pdf_utils.py` | PDF 格式、加密、页数、字符与扫描页检查；按页/段落提取 |
-| `config.py` | 本地配置、环境变量和固定限制 |
-| `models.py` | 文献、证据、观点、比较与报告的数据结构 |
-| `validators.py` | JSON/问题清单校验、整条观点冻结、观点 ID 追溯、判断分层及缺项标记 |
-| `llm_service.py` | 问题拆解、单篇提取、综合回答 Prompt；兼容 API、一次格式修复及友好错误 |
-| `workflow.py` | 固定步骤编排、输入指纹、阶段复用及草稿综合重试 |
-| `requirements.txt` | 固定本次验证的依赖版本 |
-| `.env.example` / `.gitignore` | 本地配置模板与密钥/缓存排除规则 |
-| `.streamlit/config.toml` | 页面主题、10 MB 上传限制、仅本机监听、关闭使用统计 |
-| `tests/` | 内存 PDF、真实 SDK Mock 传输、工作流和 Streamlit 页面测试 |
-| `TEST_REPORT.md` | 本次交付的实际验证结果与未验证范围 |
+| `frontend/` | React 工作台、类型契约、组件与浏览器测试 |
+| `backend/` | API、账号会话、文件存储、数据库与后台任务 |
+| `migrations/` | 可追踪的 PostgreSQL 结构迁移 |
+| `pdf_utils.py` / `validators.py` | PDF 解析和证据校验 |
+| `models.py` / `llm_service.py` / `workflow.py` | 分析结构、模型调用和阶段编排 |
+| `compose.yaml` / `deploy/` | 生产服务、Nginx、发布和备份脚本 |
+| `.github/workflows/` | 自动检查与生产部署 |
+| `tests/` | 核心与 API 集成测试 |
 
-## 自动化测试
-
-```bash
-python -m pytest -q
-python -m pip check
-```
-
-测试使用内存生成的中英文 PDF 和 SDK 的 Mock HTTP 传输，不需要密钥，不访问模型网络，不产生 API 费用。覆盖解析限制、无效文件、引文伪造/错页、JSON 修复上限、模型错误、完整流程、失败续试和页面交互去重。Mock 仅存在于 `tests/`，正式应用没有模拟结果模式。
-
-## 当前限制与后续迭代
-
-- 已使用真实 DeepSeek 验证合成文档全流程，并经用户授权复测原三篇论文：4/4 个问题项有结构化回答，14 条观点可用、4 条因失败引用被整体排除，页面渲染无异常。仍发现个别推导被模型标作论文报告等语义问题，不能把结构覆盖当作科学正确性保证，详情见 `TEST_REPORT.md`。
-- 双栏、表格、公式的抽取顺序可能影响理解；大幅扫描图片配少量页脚的文件会被保守拒绝，图片里的信息不进行识别。
-- 引文匹配不能自动判断语义支持关系，也不能彻底防止模型受到文献内的指令干扰。分析不是事实认证。
-- 文档限制针对黑客松 V0；不是用于公网多人访问的生产服务，没有持久化和跨会话历史。
-
-下一步建议：建立带人工标注的观点/引用评测集；改善双栏和表格提取质量；增加不同兼容模型服务的集成验证。保持现有 V0 范围，优先提高证据质量。
+当前从 Streamlit V0 全量迁移，旧入口已经移除。V0 没有持久化数据库，原浏览器会话不具备可导入的历史记录。

@@ -1,4 +1,4 @@
-"""只在服务端读取配置；上传文件和分析结果不写入磁盘。"""
+"""模型配置仅在 API 和 Worker 服务端读取；文件存储由 backend.storage 管理。"""
 
 import os
 from dataclasses import dataclass, field

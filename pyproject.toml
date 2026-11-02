@@ -1,0 +1,33 @@
+[project]
+name = "paperlens"
+version = "1.0.0"
+description = "跨语言多文献观点分析工作台"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "alembic>=1.15,<2",
+  "celery>=5.5,<6",
+  "boto3>=1.37,<2",
+  "python-multipart>=0.0.20,<1",
+  "pymupdf==1.28.2",
+  "openai==2.54.0",
+  "python-dotenv==1.2.4",
+]
+
+[dependency-groups]
+dev = ["pytest==9.2.0", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

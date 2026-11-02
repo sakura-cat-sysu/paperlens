@@ -1,0 +1,20 @@
+# 共用服务器：宿主机 Nginx 负责 TLS，本项目只开放 loopback 端口。
+services:
+  postgres:
+    mem_limit: 256m
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50"]
+  rabbitmq:
+    mem_limit: 384m
+  api:
+    mem_limit: 384m
+  worker:
+    mem_limit: 768m
+    command: ["celery", "-A", "backend.worker:celery", "worker", "--loglevel=WARNING", "--concurrency=1", "--hostname=worker@%h"]
+  scheduler:
+    mem_limit: 192m
+  web:
+    mem_limit: 96m
+    ports: !override
+      - "127.0.0.1:18090:80"
+    volumes: !override
+      - ${RELEASE_DIR:-.}/deploy/nginx/shared.conf.template:/etc/nginx/templates/default.conf.template:ro

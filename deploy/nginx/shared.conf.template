@@ -1,0 +1,7 @@
+# 该入口只能通过宿主机 loopback 访问；宿主机必须覆盖 X-Forwarded-For。
+server {
+    listen 80 default_server;
+    server_name _;
+    set $paperlens_client_ip $http_x_forwarded_for;
+    include /etc/nginx/snippets/site.conf;
+}

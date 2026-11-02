@@ -1,0 +1,13 @@
+# 本机容器验收：由 compose.yaml 继承生产服务，替换外部入口与测试端口。
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:55433:5432"
+  rabbitmq:
+    ports:
+      - "127.0.0.1:5674:5672"
+  web:
+    ports: !override
+      - "127.0.0.1:8088:80"
+    volumes: !override
+      - ./deploy/nginx/http.conf.template:/etc/nginx/templates/default.conf.template:ro

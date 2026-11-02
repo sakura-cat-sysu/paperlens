@@ -1,0 +1,102 @@
+name: Deploy production
+on:
+  workflow_run:
+    workflows: [Quality]
+    branches: [main]
+    types: [completed]
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: production
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      PAPERLENS_ROOT: /opt/paperlens
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Check deployment configuration
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            test -n "${!name}" || { echo "Missing production secret: $name" >&2; exit 1; }
+          done
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image names
+        id: images
+        run: |
+          repository="${GITHUB_REPOSITORY,,}"
+          echo "api=ghcr.io/$repository-api" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/$repository-web" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        id: api
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.api }}:${{ env.RELEASE_SHA }}
+          build-args: RELEASE_SHA=${{ env.RELEASE_SHA }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - uses: docker/build-push-action@v6
+        id: web
+        with:
+          context: .
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.images.outputs.web }}:${{ env.RELEASE_SHA }}
+          build-args: RELEASE_SHA=${{ env.RELEASE_SHA }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+      - name: Assemble immutable release
+        env:
+          API_IMAGE: ${{ steps.images.outputs.api }}@${{ steps.api.outputs.digest }}
+          WEB_IMAGE: ${{ steps.images.outputs.web }}@${{ steps.web.outputs.digest }}
+        run: |
+          mkdir -p bundle
+          cp compose.yaml compose.shared.yaml bundle/
+          cp -r deploy bundle/
+          printf 'API_IMAGE=%s\nWEB_IMAGE=%s\nRELEASE_SHA=%s\n' "$API_IMAGE" "$WEB_IMAGE" "$RELEASE_SHA" > bundle/images.env
+          tar -czf release.tar.gz -C bundle .
+      - name: Install SSH identity
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Publish and deploy exact commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$latest" != "$RELEASE_SHA" ]]; then
+            echo 'A newer main commit exists; skip this obsolete release'
+            exit 0
+          fi
+          python3 - <<'PY' | ssh -T -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "paperlens-deploy $RELEASE_SHA"
+          import json, os, sys
+          from pathlib import Path
+          header = json.dumps({'username': os.environ['GITHUB_ACTOR'], 'token': os.environ['GH_TOKEN']})
+          sys.stdout.buffer.write(header.encode() + b'\n')
+          sys.stdout.buffer.write(Path('release.tar.gz').read_bytes())
+          PY
+      - name: Remove SSH identity
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

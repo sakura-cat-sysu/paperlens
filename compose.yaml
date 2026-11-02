@@ -1,0 +1,102 @@
+name: paperlens
+x-app: &app
+  image: ${API_IMAGE:?Set API_IMAGE to an immutable image reference}
+  env_file: ${APP_ENV_FILE:-.env}
+  restart: unless-stopped
+  volumes:
+    - documents:/data/documents
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  logging: &logs
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paperlens
+      POSTGRES_USER: paperlens
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperlens -d paperlens"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logs
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: paperlens
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *logs
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    healthcheck:
+      disable: true
+    profiles: ["tools"]
+  api:
+    <<: *app
+    init: true
+    mem_limit: 768m
+  worker:
+    <<: *app
+    init: true
+    command: ["celery", "-A", "backend.worker:celery", "worker", "--loglevel=WARNING", "--concurrency=2", "--hostname=worker@%h"]
+    stop_grace_period: 22m
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A backend.worker:celery inspect ping -d worker@$$HOSTNAME --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+  scheduler:
+    <<: *app
+    init: true
+    user: "10001"
+    command: ["celery", "-A", "backend.worker:celery", "beat", "--loglevel=WARNING", "--schedule=/tmp/celerybeat-schedule", "--pidfile=/tmp/celerybeat.pid"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,pathlib; os.kill(int(pathlib.Path('/tmp/celerybeat.pid').read_text()), 0)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+  web:
+    image: ${WEB_IMAGE:?Set WEB_IMAGE to an immutable image reference}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${RELEASE_DIR:-.}/deploy/nginx/https.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./acme:/var/www/acme:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logs
+volumes:
+  postgres:
+  rabbitmq:
+  documents:

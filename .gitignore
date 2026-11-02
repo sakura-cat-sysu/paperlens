@@ -6,5 +6,16 @@ __pycache__/
 .pytest_cache/
 .coverage
 .DS_Store
-.streamlit/secrets.toml
 *.log
+.data/
+.cache/
+artifacts/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo
+.ruff_cache/
+acme/
+backups/
+images.env

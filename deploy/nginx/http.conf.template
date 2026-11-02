@@ -1,0 +1,6 @@
+server {
+    listen 80 default_server;
+    server_name _;
+    set $paperlens_client_ip $remote_addr;
+    include /etc/nginx/snippets/site.conf;
+}
