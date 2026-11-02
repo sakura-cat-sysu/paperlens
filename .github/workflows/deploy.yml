@@ -21,7 +21,6 @@ jobs:
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-      PAPERLENS_ROOT: /opt/paperlens
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,53 +30,12 @@ jobs:
           for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
             test -n "${!name}" || { echo "Missing production secret: $name" >&2; exit 1; }
           done
-      - uses: docker/setup-buildx-action@v3
-      - name: Install SSH identity and scoped registry token
+      - name: Install SSH identity
         run: |
           umask 077
-          mkdir -p ~/.ssh ~/.docker
+          mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -T -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" paperlens-registry-auth > ~/.docker/config.json
-      - name: Image names
-        id: images
-        run: |
-          echo 'api=ccr.ccs.tencentyun.com/ntgmc/paperlens-api' >> "$GITHUB_OUTPUT"
-          echo 'web=ccr.ccs.tencentyun.com/ntgmc/paperlens-web' >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
-        id: api
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          provenance: false
-          outputs: type=image,oci-mediatypes=false
-          tags: ${{ steps.images.outputs.api }}:${{ env.RELEASE_SHA }}
-          build-args: RELEASE_SHA=${{ env.RELEASE_SHA }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-      - uses: docker/build-push-action@v6
-        id: web
-        with:
-          context: .
-          file: frontend/Dockerfile
-          push: true
-          provenance: false
-          outputs: type=image,oci-mediatypes=false
-          tags: ${{ steps.images.outputs.web }}:${{ env.RELEASE_SHA }}
-          build-args: RELEASE_SHA=${{ env.RELEASE_SHA }}
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
-      - name: Assemble immutable release
-        env:
-          API_IMAGE: ${{ steps.images.outputs.api }}@${{ steps.api.outputs.digest }}
-          WEB_IMAGE: ${{ steps.images.outputs.web }}@${{ steps.web.outputs.digest }}
-        run: |
-          mkdir -p bundle
-          cp compose.yaml compose.shared.yaml bundle/
-          cp -r deploy bundle/
-          printf 'API_IMAGE=%s\nWEB_IMAGE=%s\nRELEASE_SHA=%s\n' "$API_IMAGE" "$WEB_IMAGE" "$RELEASE_SHA" > bundle/images.env
-          tar -czf release.tar.gz -C bundle .
       - name: Publish and deploy exact commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,14 +46,8 @@ jobs:
             echo 'A newer main commit exists; skip this obsolete release'
             exit 0
           fi
-          python3 - <<'PY' | ssh -T -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "paperlens-deploy $RELEASE_SHA"
-          import json, sys
-          from pathlib import Path
-          config = json.loads((Path.home() / '.docker/config.json').read_text())
-          header = json.dumps({'token': config['auths']['ccr.ccs.tencentyun.com']['registrytoken']})
-          sys.stdout.buffer.write(header.encode() + b'\n')
-          sys.stdout.buffer.write(Path('release.tar.gz').read_bytes())
-          PY
+          git archive --format=tar.gz "$RELEASE_SHA" > release.tar.gz
+          ssh -T -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" "paperlens-deploy $RELEASE_SHA" < release.tar.gz
       - name: Remove SSH identity
         if: always()
-        run: rm -f ~/.ssh/id_ed25519 ~/.docker/config.json
+        run: rm -f ~/.ssh/id_ed25519

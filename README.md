@@ -11,7 +11,7 @@
 - **后台分析**：Celery + RabbitMQ，PostgreSQL 保存任务、阶段检查点和报告。
 - **文献与模型**：PyMuPDF、OpenAI Python SDK，支持 DeepSeek 等 Chat Completions 兼容服务。
 - **存储**：私有 S3 兼容对象存储，或单机持久卷；数据库保存解析正文与报告快照。
-- **部署**：Nginx + HTTPS + Docker Compose；GitHub Actions 检查 `main` 后推送腾讯云私有镜像，服务器经内网拉取固定摘要。
+- **部署**：Nginx + HTTPS + Docker Compose；GitHub Actions 检查 `main` 后传送源码归档，服务器使用国内源构建并按本机镜像 ID 部署。
 
 架构与可靠性边界见 [架构说明](docs/architecture.md)，服务器安装、域名、证书和 CI 配置见 [部署手册](docs/deployment.md)，个人账号与项目隔离见 [服务器权限](docs/server-access.md)，分析规则见 [证据与模型边界](docs/analysis.md)。
 

@@ -5,14 +5,20 @@ services:
     command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50"]
   rabbitmq:
     mem_limit: 384m
+  migrate:
+    pull_policy: never
   api:
+    pull_policy: never
     mem_limit: 384m
   worker:
+    pull_policy: never
     mem_limit: 768m
     command: ["celery", "-A", "backend.worker:celery", "worker", "--loglevel=WARNING", "--concurrency=1", "--hostname=worker@%h"]
   scheduler:
+    pull_policy: never
     mem_limit: 192m
   web:
+    pull_policy: never
     mem_limit: 96m
     ports: !override
       - "127.0.0.1:18090:80"

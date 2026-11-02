@@ -1,7 +1,8 @@
 FROM node:24-alpine AS build
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-fund --no-audit
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN npm ci --no-fund --no-audit --registry="$NPM_REGISTRY"
 COPY frontend/ ./
 ARG RELEASE_SHA=development
 RUN npm run build && printf '{"release":"%s"}\n' "$RELEASE_SHA" > dist/release.json

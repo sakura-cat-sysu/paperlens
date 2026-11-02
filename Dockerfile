@@ -1,10 +1,12 @@
-FROM ghcr.io/astral-sh/uv:0.11.33 AS uv
 FROM python:3.13-slim
-COPY --from=uv /uv /usr/local/bin/uv
+ARG PYPI_INDEX=https://pypi.org/simple
+RUN pip install --no-cache-dir --index-url "$PYPI_INDEX" uv==0.11.33
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+    && uv venv \
+    && uv pip sync --require-hashes --index-url "$PYPI_INDEX" /tmp/requirements.txt
 COPY config.py models.py pdf_utils.py validators.py llm_service.py workflow.py ./
 COPY backend ./backend
 COPY alembic.ini ./

@@ -4,7 +4,7 @@ umask 077
 
 root=${PAPERLENS_ROOT:-/opt/paperlens}
 release=$(realpath "${1:?Usage: deploy.sh /opt/paperlens/releases/SHA}")
-[[ -f "$root/.env" && -f "$release/images.env" && -f "$release/compose.yaml" ]] || { echo 'Missing server .env or release bundle' >&2; exit 1; }
+[[ -f "$root/.env" && -f "$release/compose.yaml" ]] || { echo 'Missing server .env or release bundle' >&2; exit 1; }
 exec 9>"$root/deploy.lock"
 flock -w 1800 9 || { echo 'Another deployment is active' >&2; exit 1; }
 previous=$(readlink -f "$root/current" || true)
@@ -24,8 +24,14 @@ rollback() {
 }
 trap rollback ERR
 
-compose config --quiet
-compose pull --quiet
+if [[ -f "$root/shared-host" ]]; then
+  bash "$release/deploy/build.sh" "$release"
+  compose config --quiet
+  compose pull --quiet postgres rabbitmq
+else
+  compose config --quiet
+  compose pull --quiet
+fi
 compose up -d --wait --wait-timeout 180 postgres rabbitmq
 mkdir -p "$root/backups"
 backup="$root/backups/predeploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
