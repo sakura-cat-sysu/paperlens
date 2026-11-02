@@ -1,54 +1,59 @@
-# PaperLens 全量迁移验证
+# PaperLens 迁移与生产验收
 
-验证环境：Linux / WSL，Python 3.14.4、Node.js 24.22.1、Docker Engine 29.1.2、Compose 2.40.3。生产 Python 镜像使用 3.13，已实际构建和启动。
+本轮从 Streamlit V0 迁为 React / FastAPI / PostgreSQL / Celery / RabbitMQ / Nginx，部署到 **https://paperlens.aktools.cn**。服务器为 `qqbot-server`，Ubuntu 24.04 / amd64，现有其他站点继续运行。
 
-本轮由 Streamlit V0 迁为 React / FastAPI / PostgreSQL / Celery / RabbitMQ / Nginx。V0 的真实 DeepSeek 联调仅是核心逻辑的历史验证，本报告只记录新架构实际完成的检查，不将历史结果当作本轮线上验收。
+## 自动化检查
 
-## 自动化
+完整 GitHub Quality 已通过 Python、React、Playwright、API 契约、数据库迁移和真实容器验收。核心分析测试保留，Streamlit UI 测试已由 API / React / 浏览器测试替代。
 
-- 109 项原有核心测试通过：中英文 PDF、大小 / 页数 / 字符边界、扫描页与加密拒绝、引文整体冻结、问题覆盖、结构修复、错误脱敏和阶段复用。
-- 10 项真实 PostgreSQL API 集成测试通过：登录 / 注册开关 / 会话撤销、CSRF / Origin、登录次数限制、验证错误脱敏、文献与报告归属、下载 / 删除、文献去重与容量、任务提交幂等 / 额度、队列补投、草稿与失败续试、SSE 和重复消费互斥。
-- 2 项存储测试通过：本地文件完整读写删除；S3 客户端通过 botocore Stubber 检查操作契约与流关闭，未访问真实 Bucket。
-- 2 项发布脚本测试通过：执行真实 shell 发布脚本，隔离 Docker / curl 后验证备份、迁移、版本核对、成功提升和失败恢复旧 release。
-- 2 项前端组件测试通过：草稿状态、来源弹窗、整页正文、章节切换、未匹配观点标记与 HTML 文本安全渲染。
-- Python Ruff、前端 TypeScript / 生产构建、API 类型生成、Alembic schema drift 检查与 shell 语法检查通过。
+- Python 覆盖 PDF 边界、引文冻结、问题覆盖、模型错误脱敏、检查点复用、账号认证、CSRF / Origin、账号归属、额度、提交幂等、队列补投、SSE、存储和发布控制流。
+- 发布测试覆盖成功提升 / 失败恢复、国内源码构建、本机镜像 ID、归档 SHA、路径穿越、链接拒绝、非 root 用户读取源码目录和 CI SSH 命令限制。
+- 2 项 React 测试覆盖报告草稿、来源、整页正文、章节、未匹配观点和 HTML 文本渲染。
+- 2 项 Playwright 测试使用真实 API / PostgreSQL / RabbitMQ / Worker 与本机合成模型，验证上传 → 后台任务 → 报告 → 刷新 → 来源与整页正文、键盘焦点、错误文件和 320 / 375 / 768 / 1440 布局。
+- Ruff、TypeScript、Vite、Prettier、OpenAPI 类型一致性、Alembic drift 和 shell 检查通过。
+- 镜像实际构建，独立随机 Compose 项目的六项服务健康；测试清理自身临时卷。
 
-原 Streamlit 页面测试已由 API / React / Playwright 测试替代，核心校验用例保留。
+S3 测试通过 botocore Stubber 核对协议与流关闭，未访问真实 Bucket。发布失败恢复使用隔离的 Docker / curl 替身，不代表已做生产故障切换。
 
-## 浏览器完整流程
+## 生产服务与权限
 
-Playwright 使用真实 FastAPI、PostgreSQL、RabbitMQ 和 Celery Worker；模型为仅本机运行的人工合成响应，不访问付费模型，不使用私人论文。
+- 创建 `paperlens` 项目组，`ntgmc`、`paperlens-dev1`、`paperlens-dev2`、`paperlens-dev3` 四个独立个人账号加入该组。
+- 三个协作者不在 sudo 管理员组和宿主机 Docker 组，SSH 密码认证分别实测通过，首次登录要求改密。
+- 协作者可共同读写 `/opt/paperlens/workspace`，实际核对源码文件读写和 Git 访问。
+- `paperlens` 为锁定密码、nologin 的服务账号，使用独立 rootless Docker；不访问宿主机 Docker socket。
+- 实际检查三个协作者和服务账号不能进入其他项目根目录、管理员主目录、Nginx / 证书目录，不能取得 root sudo。
+- `paperlensctl` 仅允许状态、日志、重启和备份；三个协作者分别实测状态与日志可用，任意 shell 命令被拒绝。CI 专用 SSH 密钥也拒绝普通 shell 命令。
+- 服务账号限制为最多 2 核 CPU、MemoryHigh=1800M、MemoryMax=2100M。容器另有限额，仅 `127.0.0.1:18090` 映射给宿主机 Nginx；数据库和队列不开放宿主端口。
+- 原宿主机两个容器保持原运行状态，`aktools.cn` 和 `study-v4.aktools.cn` 返回 200。
 
-2 项浏览器测试通过：
+## 发布与网络
 
-- 注册并登录 → 上传两份合成 PDF → 勾选文献 → 填写问题 → 创建后台任务 → 生成带原文的报告。
-- 刷新报告继续读取，未重新提交分析。
-- 打开观点来源、查看引文与整页正文，Escape 关闭弹窗。
-- 报告删除确认可以取消。
-- 文献库无效 PDF 显示可操作错误。
-- 320、375、768 和 1440 CSS px 检查页面与报告；无横向溢出。窄屏导航采用 Radix 模态抽屉。
-- 320px 登录页键盘 Enter 提交并显示正确鉴权错误。
-- 主流程无 pageerror。
+境外大镜像下载和 GitHub Runner 向国内仓库上传均出现明显慢速，最终发布链路采用 GitHub 测试后传送小型 Git 归档，服务器用国内源构建。
 
-已实际查看桌面工作台、桌面报告、375px 报告、新建分析、文献库与320px登录截图，修复窄屏导航遮挡、密码标签含帮助文字和小文件大小显示为 0.00 MB 等问题。截图在本地 `artifacts/ui-review/`，不提交测试账号和运行证据。
+实测约 197 KB 源码包通过 SSH 传送约 0.39 秒；首次国内构建时，后端 56 个依赖下载约 1.5 秒、安装约 0.7 秒，前端依赖安装约 7.5 秒，前端类型检查与编译约 6 秒。Docker 导出、解包和服务健康等待另计；这些是本机单轮结果，不代表生产 P95。
 
-## 容器与 Nginx
+依赖版本与哈希仍来自锁文件。基础镜像使用腾讯云内网镜像源，Python 使用腾讯云 PyPI，npm 使用 npmmirror；应用镜像不再跨境传输，本机内容 ID 固定运行版本。
 
-- 实际构建 Python API / Worker 镜像和 React / Nginx 镜像。
-- 继承生产 Compose 的本机覆盖部署，PostgreSQL / RabbitMQ / API / Worker / Beat / Nginx 全部启动并通过健康检查。
-- 真实 Nginx 提供前端路由 fallback，同域代理 API；经 Nginx 完成注册、会话读取和退出。
-- 核对入口 CSP、安全头与鉴权状态；`nginx -t` 通过。
-- 使用临时本机测试证书验证生产 HTTPS 模板：证书校验通过、API readiness 正常、HTTP 正确跳转 HTTPS。没有申请公网证书。
-- PostgreSQL `pg_dump -Fc` 备份已恢复到独立 `paperlens_restore` 库，账号数量与原库一致。
+CI 使用四个仓库 Secrets 和受限 forced-command SSH 公钥。接收端验证 Git 归档 SHA 与路径 / 类型 / 体积。生产发布执行数据库备份、Alembic、等待 Worker、服务替换、HTTPS 双端 SHA 核对和失败恢复旧应用。
 
-发现 RabbitMQ 新版拒绝临时非独占控制队列，已配置 Celery 独占控制 / 事件队列并完成真实 Worker 回归。发现 Compose `--wait` 对未配置健康检查的 Beat 报错，已补进程健康检查并复验。
+生产联调发现解包目录受 077 掩码影响，导致容器非 root 用户看不到迁移文件；已修复源码目录权限，增加真实构建中的迁移发现检查与回归测试。
 
-## 未完成的外部验收
+## 正式 HTTPS 与浏览器
 
-- 未提供目标服务器、域名、SSH 访问与对象存储信息，因此没有执行线上迁移、DNS / 公网证书配置或真实 Bucket 读写。
-- 未提交或推送本轮变更，GitHub Actions 工作流尚未在远端运行；本地测试不等于远端 CI 和生产发布成功。
-- 未新增真实 DeepSeek 费用调用、并发压力测试或机器故障演练。
-- 发布控制流的失败恢复使用隔离替身测试，未在真实生产环境执行故障切换。
-- 未做真实读屏测试；自动化与键盘验收不代表完整 WCAG 认证。
+- 已申请 `paperlens.aktools.cn` 正式 Let's Encrypt 证书，HTTP 正确跳转 HTTPS。
+- 宿主机 Nginx 新增独立虚拟主机，`nginx -t` 通过，平滑 reload。
+- Certbot 针对此域名的 dry-run 续期成功，现有定时任务负责续期，部署 hook reload Nginx。
+- 生产 API、Worker、Beat、PostgreSQL、RabbitMQ、Web 六项服务均健康，API 与前端提交 SHA 一致。
+- 通过真实公网浏览器登录，检查 Secure / HttpOnly Cookie，上传合成 PDF 并刷新验证持久化；375px 无横向溢出，无 pageerror。已实际查看桌面与窄屏截图。
+- 测试 PDF 已删除，测试浏览器会话已退出，保留初始网站账号供交接；公开注册关闭。
+- 生产数据库备份已生成；迁移阶段还曾将合成数据库备份恢复到本机独立库核对数据。
 
-单机仍有整机故障风险。Worker 在模型完成但检查点未保存时异常退出，恢复可能重复收费；正常发布等待 Worker 完成，已保存阶段可以复用。数据库应用回滚以兼容迁移为前提，不自动降级数据库。
+## 尚未执行的检查
+
+- 生产模型 API 密钥未配置，分析提交明确禁用；没有在生产调用付费模型。完整分析链在 CI 使用合成模型验证。
+- 初始使用本地持久卷，未接真实 S3 Bucket；异机备份目的地与保留周期仍需配置。
+- 未进行并发压测、读屏、整机故障或生产数据库恢复切换演练。
+
+账号 / 域名 / CI 已落地不等于具备整机高可用。共用服务器仍共用内核和网络；Worker 在收费请求完成但保存检查点前异常退出，恢复可能重复收费。数据库回滚依赖兼容迁移，不自动降级。
+
+生产验证日志、截图与状态位于本机忽略目录 `.cache/server/`。私密账号交接文件单独保存，不上传仓库。
