@@ -16,6 +16,7 @@ ENV PATH="/app/.venv/bin:$PATH" STORAGE_ROOT=/data/documents
 ARG RELEASE_SHA=development
 ENV RELEASE_SHA=$RELEASE_SHA
 USER paperlens
+RUN test "$(alembic heads | wc -l)" -gt 0
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s CMD python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/health/ready', timeout=3)"
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

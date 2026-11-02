@@ -64,6 +64,10 @@ def extract_bundle(payload: bytes, target: Path, expected_sha: str):
             if total > 10 * 1024 * 1024:
                 raise ValueError("Expanded release bundle is too large")
             archive.extract(member, target, filter="data")
+    # data filter 不恢复目录模式；镜像内的非 root 用户必须能够读取源码子目录。
+    for directory in target.rglob("*"):
+        if directory.is_dir():
+            directory.chmod(0o755)
     for name in (
         "Dockerfile",
         "frontend/Dockerfile",

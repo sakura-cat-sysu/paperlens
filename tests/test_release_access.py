@@ -1,4 +1,5 @@
 import io
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -32,8 +33,14 @@ def bundle(extra=None, sha=SHA):
 
 
 def test_source_bundle_preserves_commit_identity(tmp_path):
-    extract_bundle(bundle(), tmp_path, SHA)
+    previous = os.umask(0o077)
+    try:
+        extract_bundle(bundle(), tmp_path, SHA)
+    finally:
+        os.umask(previous)
     assert (tmp_path / "deploy/deploy.sh").read_bytes() == b"test"
+    assert (tmp_path / "deploy").stat().st_mode & 0o777 == 0o755
+    assert (tmp_path / "frontend").stat().st_mode & 0o777 == 0o755
 
 
 def test_source_bundle_rejects_different_commit(tmp_path):
