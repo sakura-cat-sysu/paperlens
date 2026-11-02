@@ -4,7 +4,7 @@ RUN pip install --no-cache-dir --index-url "$PYPI_INDEX" uv==0.11.33
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+RUN uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt > /dev/null \
     && uv venv \
     && uv pip sync --require-hashes --index-url "$PYPI_INDEX" /tmp/requirements.txt
 COPY config.py models.py pdf_utils.py validators.py llm_service.py workflow.py ./

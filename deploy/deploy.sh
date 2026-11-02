@@ -27,7 +27,6 @@ trap rollback ERR
 if [[ -f "$root/shared-host" ]]; then
   bash "$release/deploy/build.sh" "$release"
   compose config --quiet
-  compose pull --quiet postgres rabbitmq
 else
   compose config --quiet
   compose pull --quiet
