@@ -1,12 +1,19 @@
 import io
+import importlib.util
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
+import time
 
 import pytest
 
 from deploy.receive import extract_bundle
+
+AUTH_MODULE = Path(__file__).resolve().parents[1] / "deploy/registry-auth.py"
+spec = importlib.util.spec_from_file_location("registry_auth", AUTH_MODULE)
+registry_auth = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(registry_auth)
 
 
 def bundle(extra=None):
@@ -48,6 +55,31 @@ def test_release_bundle_rejects_unsafe_paths(tmp_path, kind):
         member.size = 1
     with pytest.raises(ValueError):
         extract_bundle(bundle(member), tmp_path)
+
+
+def test_registry_tokens_only_allow_paperlens_repositories():
+    payload = {
+        "exp": time.time() + 7200,
+        "access": [
+            {"type": "repository", "name": name, "actions": ["pull", "push"]}
+            for name in registry_auth.REPOSITORIES
+        ],
+    }
+    registry_auth.validate_scope(payload)
+    payload["access"].append({"type": "repository", "name": "ntgmc/other-project"})
+    with pytest.raises(ValueError, match="unexpected repository"):
+        registry_auth.validate_scope(payload)
+
+
+@pytest.mark.parametrize("remaining", [-1, 90000])
+def test_registry_tokens_must_expire_soon(remaining):
+    with pytest.raises(ValueError, match="short lived"):
+        registry_auth.validate_scope(
+            {
+                "exp": time.time() + remaining,
+                "access": [{"type": "repository", "name": name} for name in registry_auth.REPOSITORIES],
+            }
+        )
 
 
 def test_ci_key_rejects_shell_commands():

@@ -22,12 +22,9 @@ def main():
     if os.geteuid() != account.pw_uid:
         raise SystemExit("Run as the paperlens service account")
     os.umask(0o077)
+    os.chdir(ROOT)
     credentials = json.loads(sys.stdin.buffer.readline(8192))
-    if (
-        not isinstance(credentials.get("username"), str)
-        or not isinstance(credentials.get("token"), str)
-        or not credentials["token"]
-    ):
+    if not isinstance(credentials.get("token"), str) or not credentials["token"]:
         raise SystemExit("Missing temporary registry credentials")
     payload = sys.stdin.buffer.read(5 * 1024 * 1024 + 1)
     if len(payload) > 5 * 1024 * 1024:
@@ -45,7 +42,8 @@ def main():
             raise SystemExit("Bundle SHA differs from requested release")
         for key, suffix in (("API_IMAGE", "api"), ("WEB_IMAGE", "web")):
             if not re.fullmatch(
-                rf"ghcr\.io/sakura-cat-sysu/paperlens-{suffix}@sha256:[a-f0-9]{{64}}", values.get(key, "")
+                rf"ccr\.ccs\.tencentyun\.com/ntgmc/paperlens-{suffix}@sha256:[a-f0-9]{{64}}",
+                values.get(key, ""),
             ):
                 raise SystemExit("Unexpected image repository or digest")
         if release.exists():
@@ -63,13 +61,8 @@ def main():
             "DOCKER_CONFIG": registry,
             "PAPERLENS_ROOT": str(ROOT),
         }
-        subprocess.run(
-            ["docker", "login", "ghcr.io", "--username", credentials["username"], "--password-stdin"],
-            input=credentials["token"],
-            text=True,
-            env=env,
-            stdout=subprocess.DEVNULL,
-            check=True,
+        (Path(registry) / "config.json").write_text(
+            json.dumps({"auths": {"ccr.ccs.tencentyun.com": {"registrytoken": credentials["token"]}}})
         )
         credentials.clear()
         subprocess.run(["bash", str(release / "deploy/deploy.sh"), str(release)], env=env, check=True)

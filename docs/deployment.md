@@ -18,16 +18,18 @@
 
 仓库配置 `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY` 和 `DEPLOY_KNOWN_HOSTS` 四个 Actions Secrets。SSH 主机公钥来自已核验的本机 known_hosts，未关闭主机校验。
 
-CI 专用公钥安装在 `ntgmc` 的 authorized_keys，配置 `restrict` 和 forced command。此密钥只接受 `paperlens-deploy <40位SHA>`，不能打开 shell、SCP、端口转发或执行任意管理员命令。
+CI 专用公钥安装在 `ntgmc` 的 authorized_keys，配置 `restrict` 和 forced command。此密钥只接受 `paperlens-deploy <40位SHA>` 和 `paperlens-registry-auth`，不能打开 shell、SCP、端口转发或执行任意管理员命令。
 
 服务端 root 拥有的 `/usr/local/libexec/paperlens-ssh-entry` 校验命令，再切换为 `paperlens` 调用 `/usr/local/libexec/paperlens-receive`。接收器校验发布包路径、类型、体积、提交 SHA 与镜像仓库 / 摘要，只写入项目目录。
 
-工作流通过 SSH 标准输入传送短期 `GITHUB_TOKEN` 和发布包。令牌仅在服务账号的临时 Docker 配置中用于本次 GHCR 拉取，结束后清理；服务器不保存个人 GitHub 令牌。包默认保持私有。
+镜像存放在 `ccr.ccs.tencentyun.com/ntgmc/paperlens-api` 与 `paperlens-web` 两个私有仓库。服务器上的仓库域名解析到腾讯云内网 `169.254.0.42`，应用更新不从境外镜像仓库下载。公共 PostgreSQL / RabbitMQ 镜像使用服务器已有的腾讯云 Docker Hub 镜像源。
+
+`paperlens-registry-auth` 通过 root 拥有的固定脚本，用服务器现有腾讯云仓库身份签发有效期约 2 小时、仅限两个 PaperLens 仓库的令牌。管理员的完整仓库密码不进入 CI；签发脚本核对仓库范围与有效期。工作流使用标准 Docker `registrytoken` 配置推送镜像，再通过 SSH 标准输入传送同一个短期令牌和发布包。临时配置在任务结束后清理，不保存个人 GitHub 令牌。
 
 发布顺序：
 
 1. push `main`，Quality 执行 Python、前端、契约、Playwright 和实际容器检查。
-2. 检查成功后，Deploy production 从同一提交构建 API / Web 镜像并推送 GHCR。
+2. 检查成功后，Deploy production 从同一提交构建 API / Web 镜像并推送腾讯云私有仓库。
 3. 镜像使用固定 digest；提交 SHA、Compose 和脚本打包，经受限 SSH 入口发送。
 4. 服务端获取部署锁，拉取镜像，备份数据库，执行 Alembic 迁移。
 5. 等待旧 Worker 完成，替换 API / Worker / Beat / Web。

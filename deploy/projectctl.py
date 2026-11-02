@@ -20,6 +20,7 @@ def main():
             "/usr/bin/sudo",
             ["sudo", "-n", "-u", "paperlens", "--", "/usr/local/bin/paperlensctl", sys.argv[1]],
         )
+    os.chdir(ROOT)
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": account.pw_dir,
