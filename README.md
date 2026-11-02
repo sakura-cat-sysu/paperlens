@@ -12,8 +12,6 @@
 - python-dotenv 读取配置；内置 dataclass 表达结构；pytest 测试。
 - 无数据库、登录、联网检索、向量库、复杂 Agent 框架或文件导出。
 
-已实际验证 macOS Apple Silicon / Python 3.14.6。源代码支持 Windows 的路径和常规 Python 环境，尚未在 Windows 或 Python 3.11 上实机运行。依赖已固定为本次验证的版本。
-
 ## 安装
 
 在项目目录打开终端。推荐使用独立虚拟环境。
