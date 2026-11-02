@@ -107,13 +107,11 @@ test("real upload → queued worker → evidence report → refresh and mobile",
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
-  await page
-    .getByLabel("上传 PDF 文献")
-    .setInputFiles({
-      name: "broken.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("invalid"),
-    });
+  await page.getByLabel("上传 PDF 文献").setInputFiles({
+    name: "broken.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("invalid"),
+  });
   await expect(page.getByRole("alert")).toBeVisible();
   await page.goto(reportUrl);
   await expect(
