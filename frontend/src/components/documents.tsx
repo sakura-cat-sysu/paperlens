@@ -141,13 +141,13 @@ export function DocumentPreview({
         <Loading />
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="text-sm">
-              物理页码{" "}
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <label className="field-label text-sm">
+              物理页码
               <select
                 value={page}
                 onChange={(event) => setPage(Number(event.target.value))}
-                className="ml-2 w-24"
+                className="w-32"
               >
                 {pages.map((_, index) => (
                   <option value={index} key={index}>
