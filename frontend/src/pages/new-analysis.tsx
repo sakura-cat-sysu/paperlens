@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ShieldCheck } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   api,
   queryKeys,
@@ -16,12 +16,17 @@ import {
 } from "../components/documents";
 import { Empty, ErrorMessage } from "../components/common";
 import { Button } from "../components/ui/button";
+import { SampleCollections, type SampleImport } from "../components/samples";
 
 export function NewAnalysis() {
+  const location = useLocation();
+  const initial = (location.state as { sample?: SampleImport } | null)?.sample;
   const navigate = useNavigate();
   const client = useQueryClient();
-  const [selected, setSelected] = useState<string[]>([]);
-  const [question, setQuestion] = useState("");
+  const [selected, setSelected] = useState<string[]>(
+    initial?.document_ids ?? [],
+  );
+  const [question, setQuestion] = useState(initial?.question ?? "");
   const [preview, setPreview] = useState<Document | null>(null);
   const [submission, setSubmission] = useState(crypto.randomUUID());
   const documents = useQuery({
@@ -90,6 +95,18 @@ export function NewAnalysis() {
         </span>
       </div>
       <ErrorMessage error={documents.error ?? config.error ?? usage.error} />
+      <SampleCollections
+        onUse={(sample) => {
+          setSelected(sample.document_ids);
+          setQuestion(sample.question);
+          setSubmission(crypto.randomUUID());
+        }}
+      />
+      {initial && (
+        <p role="status" className="notice mb-5">
+          示例文献与问题已选好，可先预览原文，再开始分析。
+        </p>
+      )}
       <form onSubmit={submit} className="analysis-form">
         <section>
           <div className="section-heading">

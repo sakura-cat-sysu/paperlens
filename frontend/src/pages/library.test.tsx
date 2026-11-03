@@ -59,7 +59,9 @@ test("library search trims and ignores case, handles no results, and sorting pre
   ];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => json(documents)),
+    vi.fn(async (input) =>
+      json(String(input) === "/api/samples" ? [] : documents),
+    ),
   );
   show(<Library />);
   await screen.findByRole("heading", { name: "Alpha.pdf" });
@@ -83,11 +85,20 @@ test("library search trims and ignores case, handles no results, and sorting pre
 test("recent sort puts a fractional-second timestamp after an earlier whole-second timestamp", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      json([
-        document("whole", "older.pdf", 100, "2026-11-03T12:00:00Z"),
-        document("fraction", "newer.pdf", 100, "2026-11-03T12:00:00.500000Z"),
-      ]),
+    vi.fn(async (input) =>
+      json(
+        String(input) === "/api/samples"
+          ? []
+          : [
+              document("whole", "older.pdf", 100, "2026-11-03T12:00:00Z"),
+              document(
+                "fraction",
+                "newer.pdf",
+                100,
+                "2026-11-03T12:00:00.500000Z",
+              ),
+            ],
+      ),
     ),
   );
   show(<Library />);

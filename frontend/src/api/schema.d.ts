@@ -211,6 +211,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Samples */
+        get: operations["list_samples_api_samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/samples/{collection_id}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Samples */
+        post: operations["import_samples_api_samples__collection_id__import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/usage": {
         parameters: {
             query?: never;
@@ -704,6 +738,53 @@ export interface components {
              */
             tasks: components["schemas"]["QuestionTask"][];
         };
+        /** SampleCollectionView */
+        SampleCollectionView: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Question */
+            question: string;
+            /** Papers */
+            papers: components["schemas"]["SamplePaperView"][];
+        };
+        /** SampleImportResult */
+        SampleImportResult: {
+            /** Document Ids */
+            document_ids: string[];
+            /** Question */
+            question: string;
+            /** Imported Count */
+            imported_count: number;
+            /** Existing Count */
+            existing_count: number;
+        };
+        /** SamplePaperView */
+        SamplePaperView: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Authors */
+            authors: string;
+            /** Year */
+            year: number;
+            /** Language */
+            language: string;
+            /** Filename */
+            filename: string;
+            /** Page Count */
+            page_count: number;
+            /** Source Url */
+            source_url: string;
+            /** License */
+            license: string;
+            /** License Url */
+            license_url: string;
+        };
         /** UsageView */
         UsageView: {
             /** Used */
@@ -1123,6 +1204,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_samples_api_samples_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleCollectionView"][];
+                };
+            };
+        };
+    };
+    import_samples_api_samples__collection_id__import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleImportResult"];
                 };
             };
             /** @description Validation Error */

@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 
-from backend import admin, auth, documents, jobs
+from backend import admin, auth, documents, jobs, samples
 from backend.auth import DB
 from backend.database import User
 from backend.schemas import Capabilities
@@ -75,4 +75,5 @@ def capabilities():
 app.include_router(auth.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
+app.include_router(samples.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")

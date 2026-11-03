@@ -459,3 +459,86 @@ def test_insufficient_evidence_draft_explains_retry_block_without_spending_quota
     assert response.json()["detail"] == detail["retry_reason"]
     assert client.get("/api/usage").json() == before
     assert len(calls) == 3
+
+
+def test_sample_import_requires_auth_and_csrf_and_is_idempotent(api_client):
+    client = api_client
+    assert client.get("/api/samples").status_code == 401
+    assert client.post("/api/samples/long-context/import").status_code == 401
+    register(client)
+    catalog = client.get("/api/samples").json()
+    assert len(catalog) == 2 and all(len(group["papers"]) == 2 for group in catalog)
+    assert client.post("/api/samples/long-context/import", headers={"x-csrf-token": "bad"}).status_code == 403
+    assert client.post("/api/samples/unknown/import").status_code == 404
+    usage = client.get("/api/usage").json()
+    first = client.post("/api/samples/long-context/import")
+    assert first.status_code == 200, first.text
+    first = first.json()
+    assert first["imported_count"] == 2 and first["existing_count"] == 0
+    repeated = client.post("/api/samples/long-context/import").json()
+    assert repeated["document_ids"] == first["document_ids"]
+    assert repeated["imported_count"] == 0 and repeated["existing_count"] == 2
+    assert repeated["question"] == catalog[0]["question"]
+    assert len(client.get("/api/documents").json()) == 2
+    assert client.get("/api/usage").json() == usage
+    for document_id in first["document_ids"]:
+        detail = client.get(f"/api/documents/{document_id}").json()
+        assert detail["pages"] and detail["text_chars"] > 1000
+        assert client.get(f"/api/documents/{document_id}/file").content.startswith(b"%PDF-")
+
+
+def test_sample_import_keeps_each_account_and_deletions_separate(api_client):
+    client = api_client
+    register(client, "one@example.com")
+    first = client.post("/api/samples/retrieval-hallucination/import").json()["document_ids"]
+    client.post("/api/auth/logout")
+    register(client, "two@example.com")
+    assert client.get("/api/documents").json() == []
+    second = client.post("/api/samples/retrieval-hallucination/import").json()["document_ids"]
+    assert set(first).isdisjoint(second)
+    assert client.delete(f"/api/documents/{first[0]}").status_code == 404
+    assert client.delete(f"/api/documents/{second[0]}").status_code == 204
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"email": "one@example.com", "password": "test-password-123"})
+    assert {doc["id"] for doc in client.get("/api/documents").json()} == set(first)
+
+
+def test_sample_import_checks_capacity_before_writing_any_files(api_client, monkeypatch):
+    from backend import storage
+    from backend.settings import settings
+
+    register(api_client)
+    monkeypatch.setattr(settings(), "max_documents", 1)
+    writes = []
+    monkeypatch.setattr(storage, "put", lambda key, content: writes.append(key))
+    response = api_client.post("/api/samples/long-context/import")
+    assert response.status_code == 409
+    assert not writes and api_client.get("/api/documents").json() == []
+
+
+def test_sample_import_storage_failure_rolls_back_and_cleans_files(api_client, monkeypatch):
+    from backend import storage
+
+    register(api_client)
+    written, removed = [], []
+    original_put, original_remove = storage.put, storage.remove
+
+    def fail_second(key, content):
+        written.append(key)
+        original_put(key, content)
+        if len(written) == 2:
+            raise RuntimeError("simulated storage failure")
+
+    def remove(key):
+        removed.append(key)
+        original_remove(key)
+
+    monkeypatch.setattr(storage, "put", fail_second)
+    monkeypatch.setattr(storage, "remove", remove)
+    with pytest.raises(RuntimeError, match="simulated storage failure"):
+        api_client.post("/api/samples/long-context/import")
+    assert written == removed and len(removed) == 2
+    assert api_client.get("/api/documents").json() == []
+    for key in written:
+        with pytest.raises(FileNotFoundError):
+            storage.get(key)
