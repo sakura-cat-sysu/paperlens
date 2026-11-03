@@ -10,8 +10,8 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.database import LoginAttempt, LoginSession, User, database, now
-from backend.schemas import AuthView, Credentials, UserView
+from backend.database import InviteCode, LoginAttempt, LoginSession, User, database, now
+from backend.schemas import AuthView, Credentials, RegistrationRequest, UserView
 from backend.settings import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,6 +62,15 @@ def current_user(session: AuthSession, db: DB) -> User:
 CurrentUser = Annotated[User, Depends(current_user)]
 
 
+def current_admin(user: CurrentUser) -> User:
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限。")
+    return user
+
+
+CurrentAdmin = Annotated[User, Depends(current_admin)]
+
+
 def login_response(user: User, response: Response, db: Session):
     token = secrets.token_urlsafe(32)
     csrf = secrets.token_hex(32)
@@ -100,12 +109,32 @@ def check_attempts(request: Request, email: str, db: Session):
     db.commit()
 
 
+def normalize_code(value: str) -> str:
+    return value.strip().replace("-", "").replace(" ", "").upper()
+
+
+def claim_invite(code: str, db: Session) -> InviteCode:
+    """校验并占用一次邀请码。行锁避免并发超额使用。"""
+    invite = db.scalar(
+        select(InviteCode).where(InviteCode.code_hash == digest(normalize_code(code))).with_for_update()
+    )
+    if invite is None or not invite.usable():
+        raise HTTPException(403, "邀请码无效或已失效，请向管理员索取新的邀请码。")
+    invite.used_count += 1
+    return invite
+
+
 @router.post("/register", response_model=AuthView, status_code=201)
-def register(credentials: Credentials, request: Request, response: Response, db: DB):
+def register(payload: RegistrationRequest, request: Request, response: Response, db: DB):
     if not settings().allow_registration:
         raise HTTPException(403, "当前未开放注册，请联系管理员开通账号。")
-    check_attempts(request, credentials.email, db)
-    user = User(email=credentials.email, password_hash=password_hash(credentials.password))
+    check_attempts(request, payload.email, db)
+    invite = claim_invite(payload.invite_code, db)
+    user = User(
+        email=payload.email,
+        password_hash=password_hash(payload.password),
+        is_admin=invite.grants_admin,
+    )
     db.add(user)
     try:
         db.commit()

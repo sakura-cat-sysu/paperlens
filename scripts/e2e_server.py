@@ -12,6 +12,34 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+E2E_INVITE_CODE = "E2EBROWSERTESTAB"
+
+
+def seed_invite():
+    """注册需要邀请码，这里预置一个仅供浏览器测试使用的固定邀请码。"""
+    from sqlalchemy import select
+
+    from backend.auth import digest
+    from backend.database import InviteCode, session_factory
+
+    code_hash = digest(E2E_INVITE_CODE)
+    with session_factory()() as session:
+        invite = session.scalar(select(InviteCode).where(InviteCode.code_hash == code_hash))
+        if invite is None:
+            session.add(
+                InviteCode(
+                    code_hash=code_hash,
+                    code_hint=f"{E2E_INVITE_CODE[:2]}****{E2E_INVITE_CODE[-2:]}",
+                    note="browser test",
+                    max_uses=100,
+                )
+            )
+        else:
+            invite.used_count = 0
+            invite.revoked_at = None
+        session.commit()
+
+
 def main():
     database = os.environ.get("TEST_DATABASE_URL")
     if not database:
@@ -111,6 +139,7 @@ def main():
             )
             pdf.save(fixtures / f"paper-{index}.pdf")
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
+    seed_invite()
     worker = subprocess.Popen(
         [
             sys.executable,

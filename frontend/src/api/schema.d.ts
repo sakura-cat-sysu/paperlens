@@ -123,6 +123,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invites */
+        get: operations["list_invites_api_admin_invites_get"];
+        put?: never;
+        /** Issue Invite */
+        post: operations["issue_invite_api_admin_invites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/invites/{invite_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Invite */
+        post: operations["revoke_invite_api_admin_invites__invite_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents": {
         parameters: {
             query?: never;
@@ -282,6 +317,8 @@ export interface components {
         Capabilities: {
             /** Allow Registration */
             allow_registration: boolean;
+            /** Invite Required */
+            invite_required: boolean;
             /** Model Configured */
             model_configured: boolean;
             /** Max File Bytes */
@@ -453,6 +490,82 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** InviteCreate */
+        InviteCreate: {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Max Uses
+             * @default 1
+             */
+            max_uses: number;
+            /**
+             * Expires In Days
+             * @default 14
+             */
+            expires_in_days: number | null;
+            /**
+             * Grants Admin
+             * @default false
+             */
+            grants_admin: boolean;
+        };
+        /**
+         * InviteIssued
+         * @description 签发结果。code 为明文，只在这一次响应中出现。
+         */
+        InviteIssued: {
+            /** Id */
+            id: string;
+            /** Code Hint */
+            code_hint: string;
+            /** Note */
+            note: string;
+            /** Grants Admin */
+            grants_admin: boolean;
+            /** Max Uses */
+            max_uses: number;
+            /** Used Count */
+            used_count: number;
+            /** State */
+            state: string;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Code */
+            code: string;
+        };
+        /** InviteView */
+        InviteView: {
+            /** Id */
+            id: string;
+            /** Code Hint */
+            code_hint: string;
+            /** Note */
+            note: string;
+            /** Grants Admin */
+            grants_admin: boolean;
+            /** Max Uses */
+            max_uses: number;
+            /** Used Count */
+            used_count: number;
+            /** State */
+            state: string;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** JobCreate */
         JobCreate: {
             /** Question */
@@ -563,6 +676,15 @@ export interface components {
             /** Kind */
             kind: string;
         };
+        /** RegistrationRequest */
+        RegistrationRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Invite Code */
+            invite_code: string;
+        };
         /** Report */
         Report: {
             /** Question */
@@ -597,6 +719,8 @@ export interface components {
             id: string;
             /** Email */
             email: string;
+            /** Is Admin */
+            is_admin: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -689,7 +813,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Credentials"];
+                "application/json": components["schemas"]["RegistrationRequest"];
             };
         };
         responses: {
@@ -781,6 +905,90 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_invites_api_admin_invites_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteView"][];
+                };
+            };
+        };
+    };
+    issue_invite_api_admin_invites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteIssued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_invite_api_admin_invites__invite_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

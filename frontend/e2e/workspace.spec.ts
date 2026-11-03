@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import path from "node:path";
 
 const password = "browser-test-password-123";
+const inviteCode = "E2EBROWSERTESTAB";
 
 test("real upload → queued worker → evidence report → refresh and mobile", async ({
   page,
@@ -12,6 +13,7 @@ test("real upload → queued worker → evidence report → refresh and mobile",
   await page.getByRole("button", { name: "还没有账号？创建账号" }).click();
   await page.getByLabel("邮箱").fill(`browser-${Date.now()}@example.com`);
   await page.getByLabel("密码", { exact: true }).fill(password);
+  await page.getByLabel("邀请码").fill(inviteCode);
   await page.getByRole("button", { name: "创建账号并登录" }).click();
   await expect(
     page.getByRole("heading", { name: "把文献读在一起。" }),

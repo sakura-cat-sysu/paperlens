@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 
-from backend import auth, documents, jobs
+from backend import admin, auth, documents, jobs
 from backend.auth import DB
 from backend.database import User
 from backend.schemas import Capabilities
@@ -61,6 +61,7 @@ def capabilities():
     config = settings()
     return Capabilities(
         allow_registration=config.allow_registration,
+        invite_required=True,
         model_configured=not load_settings().missing,
         max_file_bytes=MAX_FILE_BYTES,
         max_pages=MAX_PAGES,
@@ -72,5 +73,6 @@ def capabilities():
 
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")

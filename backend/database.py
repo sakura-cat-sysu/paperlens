@@ -2,7 +2,16 @@ from datetime import date, datetime, timezone
 from functools import lru_cache
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, UniqueConstraint, create_engine
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    JSON,
+    String,
+    UniqueConstraint,
+    create_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from backend.settings import settings
@@ -25,7 +34,40 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class InviteCode(Base):
+    """管理员签发的注册邀请码。只保存摘要，明文仅在签发时返回一次。"""
+
+    __tablename__ = "invite_codes"
+    __table_args__ = (Index("ix_invites_issuer_created", "issued_by", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    code_hint: Mapped[str] = mapped_column(String(16))
+    note: Mapped[str] = mapped_column(String(200), default="")
+    issued_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    grants_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    max_uses: Mapped[int] = mapped_column(default=1)
+    used_count: Mapped[int] = mapped_column(default=0)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+    def state(self) -> str:
+        if self.revoked_at is not None:
+            return "revoked"
+        if self.expires_at is not None and self.expires_at <= now():
+            return "expired"
+        if self.used_count >= self.max_uses:
+            return "used"
+        return "active"
+
+    def usable(self) -> bool:
+        return self.state() == "active"
 
 
 class LoginSession(Base):

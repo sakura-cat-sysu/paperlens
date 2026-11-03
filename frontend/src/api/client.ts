@@ -62,4 +62,5 @@ export const queryKeys = {
   jobs: ["analyses"] as const,
   job: (id: string) => ["analysis", id] as const,
   usage: ["usage"] as const,
+  invites: ["invites"] as const,
 };

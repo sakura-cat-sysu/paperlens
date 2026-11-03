@@ -48,8 +48,38 @@ def api_client(monkeypatch, tmp_path):
     settings.cache_clear()
 
 
-def register(client, email="reader@example.com"):
-    response = client.post("/api/auth/register", json={"email": email, "password": "test-password-123"})
+def make_invite(*, max_uses=1, grants_admin=False, expires_in_days=14, revoked=False):
+    """直接在数据库签发邀请码，返回明文。不经过管理员接口，便于引导首个账号。"""
+    from datetime import timedelta
+
+    from backend.admin import generate_code
+    from backend.auth import digest
+    from backend.database import InviteCode, now, session_factory
+
+    code = generate_code()
+    with session_factory()() as session:
+        invite = InviteCode(
+            code_hash=digest(code),
+            code_hint=f"{code[:2]}****{code[-2:]}",
+            grants_admin=grants_admin,
+            max_uses=max_uses,
+            expires_at=now() + timedelta(days=expires_in_days) if expires_in_days else None,
+            revoked_at=now() if revoked else None,
+        )
+        session.add(invite)
+        session.commit()
+    return code
+
+
+def register(client, email="reader@example.com", *, code=None, grants_admin=False):
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "password": "test-password-123",
+            "invite_code": code or make_invite(grants_admin=grants_admin),
+        },
+    )
     assert response.status_code == 201, response.text
     client.headers["x-csrf-token"] = response.json()["csrf_token"]
     return response.json()["user"]
@@ -133,10 +163,111 @@ def test_registration_can_be_closed(api_client, monkeypatch):
     assert api_client.get("/api/capabilities").json()["allow_registration"] is False
     assert (
         api_client.post(
-            "/api/auth/register", json={"email": "a@example.com", "password": "test-password-123"}
+            "/api/auth/register",
+            json={
+                "email": "a@example.com",
+                "password": "test-password-123",
+                "invite_code": make_invite(),
+            },
         ).status_code
         == 403
     )
+
+
+def test_registration_requires_a_usable_invite_code(api_client):
+    client = api_client
+    assert client.get("/api/capabilities").json()["invite_required"] is True
+    # 缺少邀请码字段被模型校验拒绝。
+    assert (
+        client.post(
+            "/api/auth/register", json={"email": "a@example.com", "password": "test-password-123"}
+        ).status_code
+        == 422
+    )
+    for code in ("WRONGCODEWRONGCO", make_invite(revoked=True)):
+        response = client.post(
+            "/api/auth/register",
+            json={"email": "a@example.com", "password": "test-password-123", "invite_code": code},
+        )
+        assert response.status_code == 403, response.text
+    # 单次邀请码用过即失效，且注册出来的是普通用户。
+    code = make_invite(max_uses=1)
+    user = register(client, "first@example.com", code=code)
+    assert user["is_admin"] is False
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/register",
+            json={"email": "second@example.com", "password": "test-password-123", "invite_code": code},
+        ).status_code
+        == 403
+    )
+
+
+def test_invite_code_accepts_hyphens_and_lowercase(api_client):
+    code = make_invite()
+    grouped = "-".join(code[i : i + 4] for i in range(0, len(code), 4)).lower()
+    user = register(api_client, "normalized@example.com", code=grouped)
+    assert user["email"] == "normalized@example.com"
+
+
+def test_admin_invite_endpoints_require_admin_and_track_usage(api_client):
+    client = api_client
+    register(client, "member@example.com")
+    assert client.get("/api/admin/invites").status_code == 403
+    assert client.post("/api/admin/invites", json={}).status_code == 403
+    client.post("/api/auth/logout")
+
+    admin = register(client, "boss@example.com", grants_admin=True)
+    assert admin["is_admin"] is True
+
+    issued = client.post(
+        "/api/admin/invites", json={"note": "合作组", "max_uses": 2, "expires_in_days": 7}
+    )
+    assert issued.status_code == 201, issued.text
+    body = issued.json()
+    assert len(body["code"]) == 16
+    # 掩码保留前两位和后两位，中间不泄露。
+    assert body["code_hint"] == f"{body['code'][:2]}****{body['code'][-2:]}"
+    assert body["state"] == "active" and body["used_count"] == 0
+
+    listed = client.get("/api/admin/invites").json()
+    # 列表含两个引导账号用掉的邀请码，加上刚签发的这个。
+    assert len(listed) == 3
+    assert listed[0]["id"] == body["id"]
+    # 列表接口只返回尾号，不回传明文。
+    assert "code" not in listed[0]
+    assert body["code"] not in client.get("/api/admin/invites").text
+
+    client.post("/api/auth/logout")
+    register(client, "invited@example.com", code=body["code"])
+    client.post("/api/auth/logout")
+
+    register(client, "boss2@example.com", grants_admin=True)
+    after = next(item for item in client.get("/api/admin/invites").json() if item["id"] == body["id"])
+    assert after["used_count"] == 1 and after["state"] == "active"
+
+    revoked = client.post(f"/api/admin/invites/{body['id']}/revoke")
+    assert revoked.status_code == 200 and revoked.json()["state"] == "revoked"
+    assert client.post("/api/admin/invites/missing-id/revoke").status_code == 404
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/register",
+            json={"email": "late@example.com", "password": "test-password-123", "invite_code": body["code"]},
+        ).status_code
+        == 403
+    )
+
+
+def test_admin_invite_can_grant_admin_rights(api_client):
+    client = api_client
+    register(client, "root@example.com", grants_admin=True)
+    code = client.post("/api/admin/invites", json={"grants_admin": True}).json()["code"]
+    client.post("/api/auth/logout")
+    promoted = register(client, "deputy@example.com", code=code)
+    assert promoted["is_admin"] is True
+    assert client.get("/api/admin/invites").status_code == 200
 
 
 def test_documents_parsed_deduplicated_owned_and_deleted(api_client, english_pdf, chinese_pdf):
