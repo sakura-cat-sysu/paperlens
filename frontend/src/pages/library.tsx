@@ -30,7 +30,7 @@ export function Library() {
     return [...list].sort((a, b) => {
       if (sort === "name") return a.filename.localeCompare(b.filename, "zh-CN");
       if (sort === "size") return b.size_bytes - a.size_bytes;
-      return b.created_at.localeCompare(a.created_at);
+      return Date.parse(b.created_at) - Date.parse(a.created_at);
     });
   }, [documents.data, query, sort]);
   const mutation = useMutation({
