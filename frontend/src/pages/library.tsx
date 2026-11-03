@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys, type Document } from "../api/client";
 import {
@@ -10,14 +10,29 @@ import { Empty, ErrorMessage, Loading } from "../components/common";
 import { Dialog } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 
+type SortKey = "recent" | "name" | "size";
+
 export function Library() {
   const client = useQueryClient();
   const [preview, setPreview] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("recent");
   const documents = useQuery({
     queryKey: queryKeys.documents,
     queryFn: () => api<Document[]>("/documents"),
   });
+  const visible = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    const list = (documents.data ?? []).filter((document) =>
+      keyword ? document.filename.toLowerCase().includes(keyword) : true,
+    );
+    return [...list].sort((a, b) => {
+      if (sort === "name") return a.filename.localeCompare(b.filename, "zh-CN");
+      if (sort === "size") return b.size_bytes - a.size_bytes;
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }, [documents.data, query, sort]);
   const mutation = useMutation({
     mutationFn: (id: string) =>
       api<void>(`/documents/${id}`, { method: "DELETE" }),
@@ -43,19 +58,56 @@ export function Library() {
       {documents.isPending ? (
         <Loading />
       ) : documents.data?.length ? (
-        <div className="surface mt-6">
-          {documents.data.map((document) => (
-            <DocumentItem
-              key={document.id}
-              document={document}
-              onPreview={() => setPreview(document)}
-              onDelete={() => {
-                mutation.reset();
-                setDeleting(document);
-              }}
+        <>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="按文件名筛选…"
+              aria-label="按文件名筛选文献"
+              className="w-full max-w-xs"
             />
-          ))}
-        </div>
+            <label className="text-sm">
+              排序{" "}
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value as SortKey)}
+                className="ml-2"
+              >
+                <option value="recent">最近添加</option>
+                <option value="name">文件名</option>
+                <option value="size">文件大小</option>
+              </select>
+            </label>
+            {query.trim() && (
+              <span role="status" className="text-sm text-secondary">
+                找到 {visible.length} 篇
+              </span>
+            )}
+          </div>
+          {visible.length ? (
+            <div className="surface mt-4">
+              {visible.map((document) => (
+                <DocumentItem
+                  key={document.id}
+                  document={document}
+                  onPreview={() => setPreview(document)}
+                  onDelete={() => {
+                    mutation.reset();
+                    setDeleting(document);
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="没有匹配的文献"
+              description="换个关键词，或清空筛选条件。"
+              action={false}
+            />
+          )}
+        </>
       ) : (
         <Empty
           title="文献库还是空的"
