@@ -130,6 +130,8 @@ class JobView(BaseModel):
 class JobDetail(JobView):
     report: Report | None
     coverage_complete: bool
+    can_retry: bool
+    retry_reason: str
 
 
 class Capabilities(BaseModel):
