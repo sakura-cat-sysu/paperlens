@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Files,
   History,
+  KeyRound,
   Plus,
   LogOut,
   Menu,
@@ -28,6 +29,7 @@ import { Workspace } from "./pages/workspace";
 import { NewAnalysis } from "./pages/new-analysis";
 import { Library } from "./pages/library";
 import { Analysis } from "./pages/analysis";
+import { Invites } from "./pages/invites";
 
 function Shell() {
   const auth = useAuth();
@@ -41,6 +43,9 @@ function Shell() {
     { to: "/", label: "工作台", Icon: LayoutDashboard },
     { to: "/library", label: "文献库", Icon: Files },
     { to: "/history", label: "分析记录", Icon: History },
+    ...(auth.user.is_admin
+      ? [{ to: "/invites", label: "邀请码", Icon: KeyRound }]
+      : []),
   ];
   async function logout() {
     setLoggingOut(true);
@@ -174,6 +179,12 @@ function Shell() {
   );
 }
 
+function AdminOnly() {
+  const auth = useAuth();
+  if (!auth.user?.is_admin) return <Navigate to="/" replace />;
+  return <Invites />;
+}
+
 export function App() {
   return (
     <BrowserRouter>
@@ -185,6 +196,7 @@ export function App() {
           <Route path="library" element={<Library />} />
           <Route path="history" element={<Workspace history />} />
           <Route path="analyses/:id" element={<Analysis />} />
+          <Route path="invites" element={<AdminOnly />} />
           <Route
             path="*"
             element={

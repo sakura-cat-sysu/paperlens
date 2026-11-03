@@ -27,10 +27,18 @@ export function Login() {
         register ? "/auth/register" : "/auth/login",
         {
           method: "POST",
-          body: JSON.stringify({
-            email: fields.get("email"),
-            password: fields.get("password"),
-          }),
+          body: JSON.stringify(
+            register
+              ? {
+                  email: fields.get("email"),
+                  password: fields.get("password"),
+                  invite_code: fields.get("invite_code"),
+                }
+              : {
+                  email: fields.get("email"),
+                  password: fields.get("password"),
+                },
+          ),
         },
       );
       auth.accept(result);
@@ -112,6 +120,27 @@ export function Login() {
                 至少 12 个字符
               </p>
             </div>
+            {register && (
+              <div>
+                <label className="field-label" htmlFor="invite_code">
+                  邀请码
+                </label>
+                <input
+                  id="invite_code"
+                  name="invite_code"
+                  className="mt-2"
+                  type="text"
+                  autoComplete="off"
+                  required
+                  maxLength={64}
+                  placeholder="XXXX-XXXX-XXXX-XXXX"
+                  aria-describedby="invite-help"
+                />
+                <p id="invite-help" className="field-help mt-2">
+                  由管理员签发，不区分大小写和连字符
+                </p>
+              </div>
+            )}
           </div>
           <ErrorMessage error={error ?? config.error} />
           <Button className="mt-6 w-full" disabled={pending}>

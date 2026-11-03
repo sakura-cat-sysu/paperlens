@@ -25,10 +25,53 @@ class Credentials(BaseModel):
         return value
 
 
+class RegistrationRequest(Credentials):
+    invite_code: str = Field(min_length=1, max_length=64)
+
+    @field_validator("invite_code")
+    @classmethod
+    def normalize_invite_code(cls, value):
+        value = value.strip().replace("-", "").replace(" ", "").upper()
+        if not value:
+            raise ValueError("请输入邀请码。")
+        return value
+
+
+class InviteCreate(BaseModel):
+    note: str = Field(default="", max_length=200)
+    max_uses: int = Field(default=1, ge=1, le=100)
+    expires_in_days: int | None = Field(default=14, ge=1, le=365)
+    grants_admin: bool = False
+
+    @field_validator("note")
+    @classmethod
+    def clean_note(cls, value):
+        return value.strip()
+
+
+class InviteView(BaseModel):
+    id: str
+    code_hint: str
+    note: str
+    grants_admin: bool
+    max_uses: int
+    used_count: int
+    state: str
+    expires_at: datetime | None
+    created_at: datetime
+
+
+class InviteIssued(InviteView):
+    """签发结果。code 为明文，只在这一次响应中出现。"""
+
+    code: str
+
+
 class UserView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     email: str
+    is_admin: bool
 
 
 class AuthView(BaseModel):
@@ -91,6 +134,7 @@ class JobDetail(JobView):
 
 class Capabilities(BaseModel):
     allow_registration: bool
+    invite_required: bool
     model_configured: bool
     max_file_bytes: int
     max_pages: int

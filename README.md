@@ -25,10 +25,32 @@ uv sync --frozen
 npm ci --prefix frontend
 docker compose -f compose.dev.yaml up -d --wait
 uv run alembic upgrade head
-uv run python -m backend.cli create-user you@example.com
+uv run python -m backend.cli create-admin you@example.com
 ```
 
-管理员命令在终端交互读取密码，不把密码放入命令行参数。默认关闭公开注册；本地需要测试注册时可在 `.env` 设置 `ALLOW_REGISTRATION=true`。
+管理员命令在终端交互读取密码，不把密码放入命令行参数。首个账号用 `create-admin` 创建；`create-user` 创建普通账号。默认关闭公开注册；开放注册时仍需邀请码，可在 `.env` 设置 `ALLOW_REGISTRATION=true`。
+
+## 账号与邀请码
+
+账号分管理员和普通用户两种。管理员可以签发注册邀请码，普通用户只能使用自己的文献与分析。
+
+注册需要同时满足两个条件：`ALLOW_REGISTRATION=true`，且提交一个仍然可用的邀请码。邀请码只在数据库保存 SHA-256 摘要和 `XX****XX` 形式的掩码，明文仅在签发响应里返回一次，之后无法再次读取。单个邀请码可设置可用次数、有效期，以及注册后是否直接成为管理员；占用时使用行锁，并发注册不会超额使用。
+
+管理员登录后在侧边栏「邀请码」页签发、查看用量和吊销。也可以在服务器终端操作：
+
+```bash
+# 签发：可用 1 次、7 天有效
+uv run python -m backend.cli issue-invite --note "合作组成员" --days 7
+
+# 可用 5 次、永不过期、注册后直接是管理员
+uv run python -m backend.cli issue-invite --max-uses 5 --days 0 --admin
+
+uv run python -m backend.cli list-invites
+uv run python -m backend.cli grant-admin someone@example.com
+uv run python -m backend.cli revoke-admin someone@example.com
+```
+
+`issue-invite` 打印的明文只显示一次，请及时转交。成员注册时填写该码，连字符和大小写都会自动归一化。
 
 分别在三个终端启动：
 
@@ -124,7 +146,7 @@ uv run python scripts/check_containers.py
 | 目录 / 文件 | 职责 |
 | --- | --- |
 | `frontend/` | React 工作台、类型契约、组件与浏览器测试 |
-| `backend/` | API、账号会话、文件存储、数据库与后台任务 |
+| `backend/` | API、账号会话、邀请码、文件存储、数据库与后台任务 |
 | `migrations/` | 可追踪的 PostgreSQL 结构迁移 |
 | `pdf_utils.py` / `validators.py` | PDF 解析和证据校验 |
 | `models.py` / `llm_service.py` / `workflow.py` | 分析结构、模型调用和阶段编排 |
