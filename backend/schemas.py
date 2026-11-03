@@ -93,6 +93,34 @@ class DocumentDetail(DocumentView):
     pages: list[PDFPage]
 
 
+class SamplePaperView(BaseModel):
+    id: str
+    title: str
+    authors: str
+    year: int
+    language: str
+    filename: str
+    page_count: int
+    source_url: str
+    license: str
+    license_url: str
+
+
+class SampleCollectionView(BaseModel):
+    id: str
+    title: str
+    description: str
+    question: str
+    papers: list[SamplePaperView]
+
+
+class SampleImportResult(BaseModel):
+    document_ids: list[str]
+    question: str
+    imported_count: int
+    existing_count: int
+
+
 class JobCreate(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     document_ids: list[UUID] = Field(min_length=2, max_length=3)

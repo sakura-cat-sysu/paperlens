@@ -130,6 +130,8 @@ function analysisApi({
 } = {}) {
   const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
     switch (String(input)) {
+      case "/api/samples":
+        return json([]);
       case "/api/documents":
         return json(documents);
       case "/api/capabilities":

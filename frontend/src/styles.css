@@ -140,6 +140,98 @@ input[type="radio"] {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+.sample-panel {
+  margin: 0 0 28px;
+  padding: 22px;
+  border: 1px solid #d7e5dc;
+  border-radius: 12px;
+  background: #eef5ef;
+}
+.sample-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #316f60;
+}
+.sample-heading > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.sample-heading h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #243c34;
+}
+.sample-heading p,
+.sample-description {
+  margin-top: 6px;
+  color: #61726c;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.sample-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+.sample-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 18px;
+  border: 1px solid #dce6df;
+  border-radius: 10px;
+  background: #fff;
+}
+.sample-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.sample-papers {
+  margin-top: 16px;
+}
+.sample-papers li + li {
+  margin-top: 12px;
+}
+.sample-papers span {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  color: #73817b;
+}
+.sample-papers a {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #316f60;
+  overflow-wrap: anywhere;
+}
+.sample-papers a svg {
+  display: inline;
+  margin-left: 4px;
+}
+.sample-credits {
+  margin: 16px 0;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #61726c;
+  overflow-wrap: anywhere;
+}
+.sample-credits summary {
+  cursor: pointer;
+}
+.sample-credits p {
+  margin-top: 8px;
+}
+.sample-credits a {
+  text-decoration: underline;
+}
+.sample-result {
+  margin-top: 16px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #316f60;
+}
 .error-message {
   display: flex;
   align-items: flex-start;

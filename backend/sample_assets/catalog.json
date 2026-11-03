@@ -1,0 +1,98 @@
+{
+  "papers": [
+    {
+      "id": "lost-middle",
+      "title": "Lost in the Middle: How Language Models Use Long Contexts",
+      "authors": "Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, Percy Liang",
+      "year": 2024,
+      "language": "English",
+      "filename": "Lost in the Middle.pdf",
+      "asset": "lost-middle.pdf",
+      "source_url": "https://aclanthology.org/2024.tacl-1.9/",
+      "pdf_url": "https://aclanthology.org/2024.tacl-1.9.pdf",
+      "sha256": "f37f6fabe0fe0d8c73b67579cd115dbf14e282cfb7b7af655ae8109638402c9b",
+      "size_bytes": 2609413,
+      "page_count": 17,
+      "text_chars": 57374,
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "license_evidence": "https://aclanthology.org/2024.tacl-1.9.pdf"
+    },
+    {
+      "id": "found-middle",
+      "title": "Found in the middle: Calibrating Positional Attention Bias Improves Long Context Utilization",
+      "authors": "Cheng-Yu Hsieh, Yung-Sung Chuang, Chun-Liang Li, Zifeng Wang, Long Le, Abhishek Kumar, James Glass, Alexander Ratner, Chen-Yu Lee, Ranjay Krishna, Tomas Pfister",
+      "year": 2024,
+      "language": "English",
+      "filename": "Found in the middle.pdf",
+      "asset": "found-middle.pdf",
+      "source_url": "https://aclanthology.org/2024.findings-acl.890/",
+      "pdf_url": "https://aclanthology.org/2024.findings-acl.890.pdf",
+      "sha256": "d18854e7dcf46489fe7708e15151a1608f523f23f083175787875ad6a7a3038e",
+      "size_bytes": 1813538,
+      "page_count": 14,
+      "text_chars": 56560,
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "license_evidence": "https://aclanthology.org/faq/copyright/"
+    },
+    {
+      "id": "hallucination-zh",
+      "title": "大语言模型幻觉研究综述",
+      "authors": "何金骍，王洪俊",
+      "year": 2026,
+      "language": "中文",
+      "filename": "大语言模型幻觉研究综述.pdf",
+      "asset": "hallucination-zh.pdf",
+      "source_url": "https://doi.org/10.12677/airr.2026.151016",
+      "pdf_url": "https://pdf.hanspub.org/airr_2610744.pdf",
+      "sha256": "5b22abada71b9f6bd8391414b6be371deed6fc52cb97f90f09bf71829a32e02b",
+      "size_bytes": 701917,
+      "page_count": 12,
+      "text_chars": 26517,
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "license_evidence": "https://pdf.hanspub.org/airr_2610744.pdf"
+    },
+    {
+      "id": "robust-ralms",
+      "title": "Toward Robust RALMs: Revealing the Impact of Imperfect Retrieval on Retrieval-Augmented Language Models",
+      "authors": "Seong-Il Park, Jay-Yoon Lee",
+      "year": 2024,
+      "language": "English",
+      "filename": "Toward Robust RALMs.pdf",
+      "asset": "robust-ralms.pdf",
+      "source_url": "https://aclanthology.org/2024.tacl-1.91/",
+      "pdf_url": "https://aclanthology.org/2024.tacl-1.91.pdf",
+      "sha256": "7423b9a24c6ca55d73f6370bdfbd2b24c54873baa27203034b036fe7e297bcf5",
+      "size_bytes": 691479,
+      "page_count": 17,
+      "text_chars": 63863,
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "license_evidence": "https://aclanthology.org/2024.tacl-1.91.pdf"
+    }
+  ],
+  "collections": [
+    {
+      "id": "long-context",
+      "title": "长上下文的位置偏差",
+      "description": "从现象发现到校准方法，比较两项研究的证据与适用范围。",
+      "question": "两篇研究如何定义并验证长上下文中的位置偏差？Found in the middle 的校准方法针对了什么问题？请比较任务设定、方法和局限；区分机制改进与可比条件下的结论冲突，并给出原文证据。",
+      "paper_ids": [
+        "lost-middle",
+        "found-middle"
+      ]
+    },
+    {
+      "id": "retrieval-hallucination",
+      "title": "检索增强能消除幻觉吗",
+      "description": "中英文对照：把综述中的缓解思路与不完美检索的实证风险放在一起。",
+      "question": "比较两篇文献对检索增强与模型幻觉关系的讨论。不可回答、对抗和矛盾资料会带来什么风险？哪些结论属于论文实证，哪些是综述建议或待验证推断？请逐项回答并给出原文证据。",
+      "paper_ids": [
+        "hallucination-zh",
+        "robust-ralms"
+      ]
+    }
+  ]
+}

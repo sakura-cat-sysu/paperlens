@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api, queryKeys, type Document } from "../api/client";
 import {
   DocumentItem,
@@ -9,10 +10,12 @@ import {
 import { Empty, ErrorMessage, Loading } from "../components/common";
 import { Dialog } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
+import { SampleCollections } from "../components/samples";
 
 type SortKey = "recent" | "name" | "size";
 
 export function Library() {
+  const navigate = useNavigate();
   const client = useQueryClient();
   const [preview, setPreview] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
@@ -53,6 +56,9 @@ export function Library() {
           {documents.data?.length ?? "—"} 篇文献
         </span>
       </div>
+      <SampleCollections
+        onUse={(sample) => navigate("/new", { state: { sample } })}
+      />
       <UploadDocuments />
       <ErrorMessage error={documents.error} />
       {documents.isPending ? (
