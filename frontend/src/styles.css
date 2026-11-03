@@ -864,7 +864,8 @@ footer {
   border: 1px solid #dce5df;
   border-radius: 10px;
   background: #fff;
-}.surface .document-row:last-child {
+}
+.surface .document-row:last-child {
   border: 0;
 }
 .source-text {

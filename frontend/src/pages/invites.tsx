@@ -301,10 +301,7 @@ export function Invites() {
               )}
             </dl>
             <div className="flex gap-3">
-              <Button
-                className="flex-1"
-                onClick={() => void copy(issued.code)}
-              >
+              <Button className="flex-1" onClick={() => void copy(issued.code)}>
                 {copied ? (
                   <Check size={17} aria-hidden="true" />
                 ) : (
