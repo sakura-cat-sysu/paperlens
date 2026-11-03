@@ -62,14 +62,21 @@ export function NewAnalysis() {
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    mutation.mutate();
+    if (!blockedReason && !mutation.isPending) mutation.mutate();
   }
-  const valid =
-    selected.length >= 2 &&
-    selected.length <= 3 &&
-    !!question.trim() &&
-    config.data?.model_configured &&
-    !!usage.data?.remaining;
+  let blockedReason = "";
+  if (documents.isPending || config.isPending || usage.isPending)
+    blockedReason = "正在读取文献与分析配置，请稍候。";
+  else if (documents.isError || config.isError || usage.isError)
+    blockedReason = "暂时无法读取文献或分析配置，请刷新后重试。";
+  else if (!config.data?.model_configured)
+    blockedReason = "模型服务尚未配置，请联系管理员。";
+  else if (usage.data?.remaining === 0)
+    blockedReason = "今日次数已用完，额度将在 UTC 零点重置。";
+  else if (selected.length < 2) blockedReason = "请选择至少 2 篇文献。";
+  else if (selected.length > 3)
+    blockedReason = "一次最多选择 3 篇文献，请取消多余选择。";
+  else if (!question.trim()) blockedReason = "请填写研究问题。";
   return (
     <>
       <div className="page-heading">
@@ -151,28 +158,25 @@ export function NewAnalysis() {
               点击分析后，文献正文会发送给模型服务。文件与报告仅对你的账号开放，并会持续保存，直到你删除。
             </p>
           </div>
-          {config.data && !config.data.model_configured && (
-            <p role="alert" className="error-message">
-              模型服务尚未配置，请联系管理员。
-            </p>
-          )}
-          {usage.data?.remaining === 0 && (
-            <p role="alert" className="error-message">
-              今日次数已用完，额度将在 UTC 零点重置。
-            </p>
-          )}
           <ErrorMessage error={mutation.error} />
           <Button
             type="submit"
             className="mt-6 w-full"
-            disabled={!valid || mutation.isPending}
+            disabled={!!blockedReason || mutation.isPending}
+            aria-describedby={
+              blockedReason ? "analysis-blocked-reason" : undefined
+            }
           >
             {mutation.isPending ? "正在创建任务…" : "开始分析"}
             <ArrowRight size={17} aria-hidden="true" />
           </Button>
-          {!valid && (
-            <p className="mt-3 text-xs text-secondary">
-              请选择 2～3 篇文献并填写研究问题。
+          {blockedReason && (
+            <p
+              id="analysis-blocked-reason"
+              role="status"
+              className="mt-3 text-sm text-secondary"
+            >
+              {blockedReason}
             </p>
           )}
         </section>

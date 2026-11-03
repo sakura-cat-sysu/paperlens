@@ -1,7 +1,13 @@
 import { useState, useRef, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Upload, X, Eye } from "lucide-react";
-import { api, queryKeys, type Document, type Schema } from "../api/client";
+import {
+  api,
+  ApiError,
+  queryKeys,
+  type Document,
+  type Schema,
+} from "../api/client";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { ErrorMessage, Loading } from "./common";
@@ -11,14 +17,38 @@ export function UploadDocuments() {
   const client = useQueryClient();
   const mutation = useMutation({
     mutationFn: async (files: File[]) => {
-      for (const file of files) {
-        if (file.size > 10 * 1024 * 1024)
-          throw new Error(`${file.name} 超过 10 MB，请选择更小的 PDF。`);
-        const body = new FormData();
-        body.append("file", file);
-        await api<Document>("/documents", { method: "POST", body });
-        await client.invalidateQueries({ queryKey: queryKeys.documents });
+      const result = {
+        uploaded: 0,
+        failures: [] as { filename: string; message: string }[],
+      };
+      for (const [index, file] of files.entries()) {
+        try {
+          if (file.size > 10 * 1024 * 1024)
+            throw new Error("超过 10 MB，请选择更小的 PDF。");
+          const body = new FormData();
+          body.append("file", file);
+          await api<Document>("/documents", { method: "POST", body });
+          result.uploaded += 1;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "上传未完成，请重试。";
+          result.failures.push({ filename: file.name, message });
+          if (
+            error instanceof ApiError &&
+            [0, 401, 403].includes(error.status)
+          ) {
+            for (const remaining of files.slice(index + 1))
+              result.failures.push({
+                filename: remaining.name,
+                message: `尚未上传：${message}`,
+              });
+            break;
+          }
+        }
       }
+      if (result.uploaded)
+        await client.invalidateQueries({ queryKey: queryKeys.documents });
+      return result;
     },
   });
   function changed(event: ChangeEvent<HTMLInputElement>) {
@@ -54,6 +84,27 @@ export function UploadDocuments() {
           disabled={mutation.isPending}
         />
       </div>
+      {!mutation.isPending && mutation.data && (
+        <div className="mt-3">
+          <p role="status" className="text-sm text-secondary">
+            已添加 {mutation.data.uploaded} 份文献
+            {mutation.data.failures.length
+              ? `，${mutation.data.failures.length} 份未能添加。`
+              : "。"}
+          </p>
+          {mutation.data.failures.length > 0 && (
+            <ul className="mt-2 space-y-2">
+              {mutation.data.failures.map((failure, index) => (
+                <li key={index}>
+                  <ErrorMessage
+                    error={new Error(`${failure.filename}：${failure.message}`)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <ErrorMessage error={mutation.error} />
     </div>
   );

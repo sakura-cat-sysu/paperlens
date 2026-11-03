@@ -44,12 +44,28 @@ def reserve_analysis(db, user):
     usage.used += 1
 
 
+def retry_block_reason(job, report):
+    if job.status not in ("failed", "draft"):
+        return "此任务当前不需要重试。"
+    if job.status == "draft":
+        eligible = (
+            sum(any(claim.supported for claim in analysis.claims) for analysis in report.analyses)
+            if report else 0
+        )
+        if eligible < 2:
+            return "可用证据不足，请调整文献或问题后创建新分析。"
+    return ""
+
+
 def job_detail(job):
     report = REPORT.validate_python(job.report) if job.report else None
+    retry_reason = retry_block_reason(job, report)
     return JobDetail(
         **JobView.model_validate(job).model_dump(),
         report=report,
         coverage_complete=report.coverage_complete if report else False,
+        can_retry=not retry_reason,
+        retry_reason=retry_reason,
     )
 
 
@@ -116,13 +132,10 @@ def retry_job(job_id: str, user: CurrentUser, db: DB):
 
     db.scalar(select(User).where(User.id == user.id).with_for_update())
     job = owned(db, AnalysisJob, job_id, user.id)
-    if job.status not in ("failed", "draft"):
-        raise HTTPException(409, "此任务当前不需要重试。")
-    if job.status == "draft":
-        report = REPORT.validate_python(job.report)
-        eligible = sum(any(claim.supported for claim in analysis.claims) for analysis in report.analyses)
-        if eligible < 2:
-            raise HTTPException(409, "可用证据不足，请调整文献或问题后创建新分析。")
+    report = REPORT.validate_python(job.report) if job.status == "draft" and job.report else None
+    retry_reason = retry_block_reason(job, report)
+    if retry_reason:
+        raise HTTPException(409, retry_reason)
     reserve_analysis(db, user)
     job.status = "queued"
     job.error = ""

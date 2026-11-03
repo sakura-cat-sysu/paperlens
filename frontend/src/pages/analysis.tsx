@@ -93,7 +93,10 @@ export function Analysis() {
               <Button
                 variant="outline"
                 onClick={() => retry.mutate()}
-                disabled={retry.isPending}
+                disabled={retry.isPending || !value.can_retry}
+                aria-describedby={
+                  value.retry_reason ? "retry-blocked-reason" : undefined
+                }
               >
                 <RotateCcw size={16} aria-hidden="true" />
                 {retry.isPending
@@ -115,6 +118,18 @@ export function Analysis() {
             )}
           </div>
         </div>
+        {["failed", "draft"].includes(value.status) && value.retry_reason && (
+          <p
+            id="retry-blocked-reason"
+            role="status"
+            className="mt-3 text-sm text-secondary"
+          >
+            {value.retry_reason}{" "}
+            <Link to="/new" className="text-link">
+              新建分析
+            </Link>
+          </p>
+        )}
       </div>
       <ErrorMessage error={job.error ?? retry.error} />
       {value.error && <ErrorMessage error={new Error(value.error)} />}
