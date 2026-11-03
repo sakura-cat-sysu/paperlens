@@ -64,6 +64,7 @@ export function Invites() {
     mutationFn: (id: string) =>
       api<Invite>(`/admin/invites/${id}/revoke`, { method: "POST" }),
     onSuccess: () => {
+      setError(undefined);
       void client.invalidateQueries({ queryKey: queryKeys.invites });
     },
     onError: setError,
