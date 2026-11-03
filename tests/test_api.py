@@ -304,3 +304,27 @@ def test_worker_advisory_lock_and_health(api_client, english_pdf, chinese_pdf):
         connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
     assert client.get("/api/health/ready").status_code == 200
     assert client.get("/api/health/live").json()["release"] == "development"
+
+
+def test_insufficient_evidence_draft_explains_retry_block_without_spending_quota(
+    api_client, english_pdf, chinese_pdf, mock_service
+):
+    client = api_client
+    register(client)
+    ids = upload_pair(client, english_pdf, chinese_pdf)
+    valid_quote = client.get(f"/api/documents/{ids[1]}").json()["pages"][0]["text"]
+    job, _ = create(client, ids)
+    service, calls = mock_service(
+        [plan_result(), single_result("This invented quote is not in the document."), single_result(valid_quote)]
+    )
+    process(job["id"], service)
+    detail = client.get(f"/api/analyses/{job['id']}").json()
+    assert detail["status"] == "draft"
+    assert not detail["can_retry"]
+    assert "可用证据不足" in detail["retry_reason"]
+    before = client.get("/api/usage").json()
+    response = client.post(f"/api/analyses/{job['id']}/retry")
+    assert response.status_code == 409
+    assert response.json()["detail"] == detail["retry_reason"]
+    assert client.get("/api/usage").json() == before
+    assert len(calls) == 3

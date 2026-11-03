@@ -494,6 +494,10 @@ export interface components {
             report: components["schemas"]["Report"] | null;
             /** Coverage Complete */
             coverage_complete: boolean;
+            /** Can Retry */
+            can_retry: boolean;
+            /** Retry Reason */
+            retry_reason: string;
         };
         /** JobView */
         JobView: {
