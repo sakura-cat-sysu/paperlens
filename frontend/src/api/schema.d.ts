@@ -708,7 +708,7 @@ export interface components {
         };
         /**
          * InviteIssued
-         * @description ǩ�������code Ϊ���ģ�ֻ����һ����Ӧ�г��֡�
+         * @description 签发结果。code 为明文，只在这一次响应中出现。
          */
         InviteIssued: {
             /** Id */
@@ -864,7 +864,7 @@ export interface components {
         };
         /**
          * ModelConfigView
-         * @description ģ�����õ�չʾ��̬����Զ����������Կ��ֻ�����롣
+         * @description 模型配置的展示形态。永远不含明文密钥，只给掩码。
          */
         ModelConfigView: {
             /** Id */
