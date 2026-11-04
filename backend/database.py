@@ -35,7 +35,24 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_guest: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class GuestIdentity(Base):
+    __tablename__ = "guest_identities"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class GuestEntryRate(Base):
+    __tablename__ = "guest_entry_rates"
+    address_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created: Mapped[int] = mapped_column(default=0)
 
 
 class InviteCode(Base):

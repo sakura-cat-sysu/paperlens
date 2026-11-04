@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/guest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Guest */
+        post: operations["guest_api_auth_guest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/register": {
         parameters: {
             query?: never;
@@ -351,6 +368,12 @@ export interface components {
         Capabilities: {
             /** Allow Registration */
             allow_registration: boolean;
+            /** Allow Guests */
+            allow_guests: boolean;
+            /** Guest Daily Analyses */
+            guest_daily_analyses: number;
+            /** Guest Max Documents */
+            guest_max_documents: number;
             /** Invite Required */
             invite_required: boolean;
             /** Model Configured */
@@ -802,6 +825,11 @@ export interface components {
             email: string;
             /** Is Admin */
             is_admin: boolean;
+            /**
+             * Is Guest
+             * @default false
+             */
+            is_guest: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -881,6 +909,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Capabilities"];
+                };
+            };
+        };
+    };
+    guest_api_auth_guest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthView"];
                 };
             };
         };

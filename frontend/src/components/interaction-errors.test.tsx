@@ -159,7 +159,7 @@ async function fillAnalysis() {
 
 test.each([
   [{ configured: false }, "模型服务尚未配置，请联系管理员。"],
-  [{ remaining: 0 }, "今日次数已用完，额度将在 UTC 零点重置。"],
+  [{ remaining: 0 }, "今日次数已用完，额度每天北京时间 08:00 重置。"],
   [{ configError: true }, "暂时无法读取文献或分析配置，请刷新后重试。"],
 ])(
   "a disabled analysis explains its actual service or quota blocker: %j",

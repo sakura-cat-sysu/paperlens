@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import * as Drawer from "@radix-ui/react-dialog";
 import {
   BookOpen,
@@ -24,6 +24,7 @@ import {
 import { useAuth } from "./auth";
 import { Button } from "./components/ui/button";
 import { ErrorMessage } from "./components/common";
+import { GuestNotice } from "./components/guest-notice";
 import { Login } from "./pages/login";
 import { Workspace } from "./pages/workspace";
 import { NewAnalysis } from "./pages/new-analysis";
@@ -98,17 +99,23 @@ function Shell() {
           </p>
         </div>
         <div className="account">
-          <span className="avatar">{auth.user.email[0].toUpperCase()}</span>
+          <span className="avatar">
+            {auth.user.is_guest ? "G" : auth.user.email[0].toUpperCase()}
+          </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium">{auth.user.email}</p>
-            <p className="mt-1 text-xs text-secondary">个人工作空间</p>
+            <p className="truncate text-xs font-medium">
+              {auth.user.is_guest ? "游客体验" : auth.user.email}
+            </p>
+            <p className="mt-1 text-xs text-secondary">
+              {auth.user.is_guest ? "此浏览器独立空间" : "个人工作空间"}
+            </p>
           </div>
           <Button
             variant="ghost"
             className="px-2"
             onClick={logout}
             disabled={loggingOut}
-            aria-label="退出登录"
+            aria-label={auth.user.is_guest ? "退出游客体验" : "退出登录"}
           >
             <LogOut size={17} aria-hidden="true" />
           </Button>
@@ -159,7 +166,7 @@ function Shell() {
             <span>文献阅读与分析</span>
             <span className="flex items-center gap-2">
               <span className="size-1.5 rounded-full bg-primary" />
-              个人工作空间
+              {auth.user.is_guest ? "游客工作空间" : "个人工作空间"}
             </span>
           </div>
           <main
@@ -168,6 +175,7 @@ function Shell() {
             key={location.pathname}
             tabIndex={-1}
           >
+            <GuestNotice />
             <Outlet />
           </main>
           <footer>
@@ -185,9 +193,19 @@ function AdminOnly() {
   return <Invites />;
 }
 
+function PageStart() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    if (window.scrollX || window.scrollY)
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <BrowserRouter>
+      <PageStart />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>

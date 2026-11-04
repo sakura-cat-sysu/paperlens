@@ -10,7 +10,7 @@ from backend import storage
 from backend.auth import CurrentUser, DB
 from backend.database import AnalysisJob, StoredDocument, User, identifier, owned
 from backend.schemas import DOCUMENT, DocumentDetail, DocumentView
-from backend.settings import settings
+from backend.settings import document_limit
 from config import MAX_FILE_BYTES
 from pdf_utils import PDFError, parse_pdf
 
@@ -59,7 +59,7 @@ def upload_document(file: UploadFile, user: CurrentUser, db: DB):
     count = db.scalar(
         select(func.count()).select_from(StoredDocument).where(StoredDocument.owner_id == user.id)
     )
-    if count >= settings().max_documents:
+    if count >= document_limit(user):
         raise HTTPException(409, "文献库已满，请删除不再需要的文献后重试。")
     document_id = identifier()
     key = f"{user.id}/{document_id}.pdf"
