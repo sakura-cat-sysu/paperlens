@@ -14,11 +14,12 @@ dependencies = [
   "python-multipart>=0.0.20,<1",
   "pymupdf==1.28.2",
   "openai==2.54.0",
+  "httpx>=0.28,<1",
   "python-dotenv==1.2.4",
 ]
 
 [dependency-groups]
-dev = ["pytest==9.2.0", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+dev = ["pytest==9.2.0", "ruff>=0.11,<1"]
 
 [tool.uv]
 package = false

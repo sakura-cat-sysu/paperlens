@@ -13,12 +13,13 @@ from pdf_utils import parse_pdf
 from workflow import run_workflow
 
 
+@pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("base_url,path", [
     ("https://api.deepseek.com", "/chat/completions"),
     ("https://api.deepseek.com/v1", "/v1/chat/completions"),
 ])
-def test_deepseek_full_sdk_workflow(base_url, path, english_pdf, chinese_pdf):
-    settings = Settings(api_key="deepseek-test-not-real", base_url=base_url, model="deepseek-flash")
+def test_deepseek_full_sdk_workflow(base_url, path, stream, english_pdf, chinese_pdf):
+    settings = Settings(api_key="deepseek-test-not-real", base_url=base_url, model="deepseek-flash", stream=stream)
     documents = (parse_pdf(english_pdf, "en.pdf", "D1"), parse_pdf(chinese_pdf, "中文.pdf", "D2"))
     outputs = iter([plan_result()] + [single_result(d.pages[0].text) for d in documents] + [comparison_result()])
     requests = []
@@ -30,14 +31,21 @@ def test_deepseek_full_sdk_workflow(base_url, path, english_pdf, chinese_pdf):
         body = json.loads(request.content)
         requests.append(body)
         assert body["model"] == "deepseek-flash"
+        assert body["stream"] is stream
         assert body["thinking"] == {"type": "disabled"}
         payload = json.loads(body["messages"][1]["content"])
         assert body["max_tokens"] == (8192 if "documents" in payload else 4096)
         assert "response_format" not in body  # 仍保留通用 JSON 解析及有限修复
+        text = json.dumps(next(outputs), ensure_ascii=False)
+        if stream:
+            delta = json.dumps({"choices": [{"delta": {"content": text}}]}, ensure_ascii=False)
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=(
+                f'data: {delta}\n\ndata: {{"choices":[{{"delta":{{}},"finish_reason":"stop"}}]}}\n\ndata: [DONE]\n\n'
+            ).encode())
         return httpx.Response(200, json={
             "id": "deepseek-test", "object": "chat.completion", "created": 0,
             "model": "deepseek-flash", "choices": [{"index": 0, "finish_reason": "stop", "message": {
-                "role": "assistant", "content": json.dumps(next(outputs), ensure_ascii=False),
+                "role": "assistant", "content": text,
             }}],
         })
 
@@ -61,3 +69,4 @@ def test_generic_provider_receives_no_deepseek_parameters(mock_service, english_
     service.analyze_document(parse_pdf(english_pdf, "study.pdf", "D1"), "AI efficiency?")
     assert "thinking" not in requests[0]
     assert "max_tokens" not in requests[0]
+    assert requests[0]["max_completion_tokens"] == 4096

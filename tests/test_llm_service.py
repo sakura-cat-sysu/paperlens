@@ -72,7 +72,8 @@ def test_missing_configuration():
         LLMService(Settings(api_key="test-only"))
 
 
-@pytest.mark.parametrize("url", ["ftp://example.com", "https://key@example.com/v1", "https://example.com?key=secret", "https://[invalid"])
+@pytest.mark.parametrize("url", ["ftp://example.com", "https://key@example.com/v1", "https://example.com?key=secret",
+                                 "https://[invalid", "https://example.com:invalid/v1", "https://:443/v1"])
 def test_bad_base_url(url):
     with pytest.raises(AnalysisError, match="BASE_URL"):
         LLMService(Settings(api_key="test-only", model="test-model", base_url=url))

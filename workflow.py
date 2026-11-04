@@ -20,6 +20,9 @@ def input_signature(documents: tuple[Document, ...], question: str, settings: Se
         "credential_fingerprint": hashlib.sha256(settings.api_key.encode()).hexdigest(),
         "prompt_version": 3,
     }
+    # 默认协议保留旧检查点；切换协议时不复用其他接口的结果。
+    if settings.protocol != "chat":
+        payload["protocol"] = settings.protocol
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 

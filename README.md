@@ -9,7 +9,7 @@
 - **前端**：React、TypeScript、Vite、React Router、TanStack Query、Tailwind CSS、基于 Radix 的 shadcn 风格组件。
 - **后端**：FastAPI、Pydantic、SQLAlchemy、Alembic，Python 3.12～3.14。
 - **后台分析**：Celery + RabbitMQ，PostgreSQL 保存任务、阶段检查点和报告。
-- **文献与模型**：PyMuPDF、OpenAI Python SDK，支持 DeepSeek 等 Chat Completions 兼容服务。
+- **文献与模型**：PyMuPDF、OpenAI Python SDK 传输层，支持 Chat Completions、Responses、Anthropic Messages，以及普通 JSON 和 SSE 流式响应。
 - **存储**：私有 S3 兼容对象存储，或单机持久卷；数据库保存解析正文与报告快照。
 - **部署**：Nginx + HTTPS + Docker Compose；GitHub Actions 检查 `main` 后传送源码归档，服务器使用国内源构建并按本机镜像 ID 部署。
 
@@ -83,11 +83,25 @@ uv run celery -A backend.worker:celery beat --loglevel=WARNING --schedule=.cache
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-flash
+OPENAI_PROTOCOL=chat
+OPENAI_STREAM=false
 ```
 
-`OPENAI_` 是兼容 SDK 的变量前缀，不代表一定调用 OpenAI。`BASE_URL` 使用 API 根地址，不追加 `/chat/completions`。系统环境变量优先于 `.env`。
+`OPENAI_` 是模型配置的统一前缀，不代表一定调用 OpenAI。系统环境变量优先于 `.env`；未填写新增配置时沿用 `chat` 和非流式请求。
 
-DeepSeek 官方域名下明确关闭思考模式，拆解与单篇阶段最多输出 4,096 tokens，综合阶段最多 8,192 tokens；其他兼容服务不会收到这些专用参数。SDK 自动重试关闭，结构错误最多修复一次。更新配置后重启 API 和 Worker。
+| `OPENAI_PROTOCOL` | 接口 | 鉴权 | 未填写 `OPENAI_BASE_URL` 时的根地址 |
+| --- | --- | --- | --- |
+| `chat` | Chat Completions | Bearer API Key | `https://api.openai.com/v1` |
+| `responses` | Responses | Bearer API Key | `https://api.openai.com/v1` |
+| `messages` | Anthropic Messages | `x-api-key` | `https://api.anthropic.com/v1` |
+
+`OPENAI_BASE_URL` 可填站点根地址、带网关前缀的根地址、含 `/v1` 的地址或完整接口地址。普通根地址自动补 `/v1`；完整地址去掉接口后缀再按所选协议拼接，保留原有路径。例如 `https://gateway.example/coding` 会请求 `/coding/v1/...`，`https://gateway.example/custom/messages` 保留 `/custom`。DeepSeek 官方根地址继续直接请求 `/chat/completions`，也支持 `/v1`。
+
+`OPENAI_STREAM=true` 启用上游流式请求。服务会逐块接收 SSE，过滤思考内容，并在完整结束后执行 JSON、结构和引文校验；页面继续显示阶段进度。服务商即使返回与请求方式不同的 JSON / SSE，也可自动识别。流中错误、截断或未结束的回答不会作为阶段结果保存。
+
+所有协议在拆解与单篇阶段最多输出 4,096 tokens，综合阶段最多输出 8,192 tokens。仅在 DeepSeek 官方域名的 Chat 接口下发送关闭思考的专用参数。Responses 请求设置 `store=false`。
+
+SDK 自动重试关闭。只有服务明确以 HTTP 400 / 422 拒绝 `max_completion_tokens` 或要求流式时，才分别切换为 `max_tokens`、`stream=true`；每次请求最多两次兼容调整，其他 API 错误不重试。结构错误仍最多修复一次，引文不匹配不触发修复。切换协议会使用独立检查点，仅改变流式开关可复用已有结果。更新配置后重启 API 和 Worker。
 
 未配置模型时，页面会明确提示，不能创建分析任务，也不会生成模拟报告。测试响应仅存在于测试与浏览器测试脚本中。
 

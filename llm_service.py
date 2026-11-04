@@ -1,12 +1,15 @@
-"""固定流程：拆解问题、单篇提取、逐项回答；兼容 Chat Completions。"""
+"""固定分析流程；支持 Chat Completions、Responses、Messages 的 JSON 与 SSE 响应。"""
 
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
+from itertools import chain
 from urllib.parse import urlparse
 
+import httpx
 from openai import (
     APIConnectionError, APIError, APIStatusError, APITimeoutError, AuthenticationError,
-    OpenAI, PermissionDeniedError, RateLimitError,
+    OpenAI, PermissionDeniedError, RateLimitError, omit,
 )
 
 from config import Settings
@@ -85,17 +88,20 @@ class LLMService:
     def __init__(self, settings: Settings, *, client=None):
         if settings.missing:
             raise AnalysisError("尚未配置 " + "、".join(settings.missing) + "。请填写项目的 .env 后重试。")
+        if settings.protocol not in ("chat", "responses", "messages"):
+            raise AnalysisError("OPENAI_PROTOCOL 必须是 chat、responses 或 messages。")
         if settings.base_url:
             try:
                 parsed = urlparse(settings.base_url)
+                parsed.port
             except ValueError:
                 raise AnalysisError("OPENAI_BASE_URL 格式无效，请检查 API 根地址。") from None
-            if (parsed.scheme not in ("https", "http") or not parsed.netloc
+            if (parsed.scheme not in ("https", "http") or not parsed.hostname
                     or parsed.username or parsed.password or parsed.query or parsed.fragment):
                 raise AnalysisError("OPENAI_BASE_URL 格式无效，请填写不含密钥和查询参数的 http(s) API 根地址。")
         self.settings = settings
         self.client = client or OpenAI(
-            api_key=settings.api_key, base_url=settings.base_url or None,
+            api_key=settings.api_key, base_url=settings.api_base_url,
             timeout=settings.timeout_seconds, max_retries=0,
         )
 
@@ -106,33 +112,58 @@ class LLMService:
         self.client.close()
 
     def _complete(self, messages: list[dict], *, max_output_tokens: int = 4096) -> str:
-        try:
-            options = {}
-            if self.settings.is_deepseek:
-                # DeepSeek 当前默认开启思考；V0 明确关闭以降低延迟，并限制输出成本。
-                # extra_body 由官方推荐，可经 OpenAI SDK 传递 thinking 参数。
-                options = {"extra_body": {"thinking": {"type": "disabled"}}, "max_tokens": max_output_tokens}
-            response = self.client.chat.completions.create(
-                model=self.settings.model, messages=messages, **options,
+        protocol = self.settings.protocol
+        endpoint = {"chat": "chat/completions", "responses": "responses", "messages": "messages"}[protocol]
+        body = {"model": self.settings.model, "stream": self.settings.stream}
+        headers = {"Accept": "application/json, text/event-stream"}
+        if protocol == "responses":
+            body.update(input=messages, max_output_tokens=max_output_tokens, store=False)
+        elif protocol == "messages":
+            body.update(
+                system="\n\n".join(m["content"] for m in messages if m["role"] == "system"),
+                messages=[m for m in messages if m["role"] != "system"], max_tokens=max_output_tokens,
             )
-            if not response.choices:
-                raise AnalysisError("模型返回空响应，请稍后重试或检查模型是否支持文本对话。")
-            choice = response.choices[0]
-            if choice.finish_reason == "length":
-                raise AnalysisError("模型响应因长度限制中断，请缩小文献范围或调整模型服务的输出限制后重试。")
-            if choice.finish_reason == "content_filter" or getattr(choice.message, "refusal", None):
-                raise AnalysisError("模型服务未能处理这次请求，请调整研究问题或换用合适的模型。")
-            content = choice.message.content
-            if not isinstance(content, str) or not content.strip():
-                raise AnalysisError("模型未返回可读取的文本，请检查模型兼容性后重试。")
-            return content
-        except APITimeoutError:
-            raise AnalysisError("模型请求超时（单次最多 60 秒）。已完成的文献分析会保留，可点击重试。") from None
+            headers.update({"Authorization": omit, "x-api-key": self.settings.api_key,
+                            "anthropic-version": "2023-06-01"})
+        else:
+            body.update(messages=messages, max_completion_tokens=max_output_tokens)
+            if self.settings.is_deepseek:
+                # 官方 DeepSeek 使用 max_tokens，并明确关闭思考以降低延迟。
+                del body["max_completion_tokens"]
+                body.update(thinking={"type": "disabled"}, max_tokens=max_output_tokens)
+        try:
+            # 复用 SDK 的鉴权、错误映射和传输层；按响应内容识别 JSON / SSE。
+            for attempt in range(3):
+                try:
+                    response = self.client.post(endpoint, body=body, cast_to=httpx.Response,
+                                                stream=True, options={"headers": headers, "follow_redirects": False})
+                    break
+                except APIStatusError as exc:
+                    if attempt == 2 or exc.status_code not in (400, 422):
+                        raise
+                    rejected = exc.response.text
+                    if ("max_completion_tokens" in body and "max_completion_tokens" in rejected
+                            and re.search(r"unsupported|unknown|unrecognized|unexpected|not[_ ](?:supported|permitted)"
+                                          r"|extra[_ ](?:fields|inputs)|not allowed|不支持", rejected, re.I)):
+                        body["max_tokens"] = body.pop("max_completion_tokens")
+                    elif not body["stream"] and re.search(
+                        r'stream(?:ing)?[^"\r\n]*(?:required|true)|(?:requires?|only)[^"\r\n]*stream(?:ing)?'
+                        r'|(?:必须|需要|仅支持|只支持)[^"\r\n]*流式', rejected, re.I,
+                    ):
+                        body["stream"] = True
+                    else:
+                        raise
+            try:
+                return _read_response(response, protocol)
+            finally:
+                response.close()
+        except (APITimeoutError, httpx.TimeoutException):
+            raise AnalysisError("模型请求超时。已完成的文献分析会保留，可点击重试。") from None
         except (AuthenticationError, PermissionDeniedError):
             raise AnalysisError("模型鉴权失败或无访问权限，请检查 API Key 和模型权限。") from None
         except RateLimitError:
             raise AnalysisError("模型服务限流或额度不足，请检查额度，稍后重试。") from None
-        except APIConnectionError:
+        except (APIConnectionError, httpx.RequestError):
             raise AnalysisError("无法连接模型服务，请检查网络和 OPENAI_BASE_URL。") from None
         except APIStatusError as exc:
             if exc.status_code == 404:
@@ -140,7 +171,7 @@ class LLMService:
             elif exc.status_code == 402:
                 message = "模型服务余额不足，请检查账户余额后重试。"
             elif exc.status_code in (400, 422):
-                message = "模型服务拒绝了请求，请检查模型是否支持 Chat Completions，或缩小文献长度。"
+                message = "模型服务拒绝了请求，请检查 OPENAI_PROTOCOL、模型名称或文献长度。"
             else:
                 message = f"模型服务暂时不可用（HTTP {exc.status_code}），请稍后重试。"
             raise AnalysisError(message) from None
@@ -193,3 +224,150 @@ class LLMService:
                                        "excluded_claims": sum(not c.supported for c in a.claims)} for a in analyses]},
                                   validate_comparison_schema, max_output_tokens=8192)
         return build_comparison(data, analyses, tasks)
+
+
+def _read_response(response: httpx.Response, protocol: str) -> str:
+    lines = response.iter_lines()
+    first = next((line.lstrip("\ufeff") for line in lines if line.strip()), "")
+    if not first:
+        raise AnalysisError("模型返回空响应，请检查 API 根地址和模型配置。")
+    if ("text/event-stream" in response.headers.get("content-type", "")
+            or first.startswith(("data:", "event:", ":", "id:", "retry:"))):
+        return _stream_text(chain((first,), lines), protocol)
+    try:
+        data = json.loads("\n".join(chain((first,), lines)))
+    except json.JSONDecodeError:
+        raise AnalysisError("模型服务返回的内容不是 JSON，请检查接口地址是否指向 API 而非网页。") from None
+    return _response_text(data, protocol)
+
+
+def _content_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(item["text"] for item in content if isinstance(item, dict)
+                       and item.get("type") in ("text", "output_text") and isinstance(item.get("text"), str))
+    return ""
+
+
+def _response_text(data, protocol: str) -> str:
+    if not isinstance(data, dict):
+        raise AnalysisError("模型响应结构与所选协议不兼容，请检查 OPENAI_PROTOCOL。")
+    try:
+        if data.get("error") or data.get("status") == "failed":
+            raise AnalysisError("模型服务在生成回答时返回错误，请稍后重试。")
+        if protocol == "chat":
+            if not data.get("choices"):
+                raise AnalysisError("模型返回空响应或协议不兼容，请检查 OPENAI_PROTOCOL 和模型配置。")
+            choice = data["choices"][0]
+            stop = choice.get("finish_reason")
+            content = choice["message"].get("content")
+            refusal = choice["message"].get("refusal")
+        elif protocol == "responses":
+            stop = data.get("status")
+            blocks = [block for item in data.get("output", []) if item.get("type") == "message"
+                      for block in item.get("content", [])]
+            refusal = any(block.get("type") == "refusal" for block in blocks)
+            content = data.get("output_text") or blocks
+        else:
+            stop = data.get("stop_reason")
+            content = data.get("content")
+            refusal = stop == "refusal"
+        if stop in ("length", "incomplete", "max_tokens", "pause_turn"):
+            raise AnalysisError("模型响应未完整生成或因长度限制中断，请缩小文献范围或调整输出限制后重试。")
+        if stop == "content_filter" or refusal:
+            raise AnalysisError("模型服务未能处理这次请求，请调整研究问题或换用合适的模型。")
+        text = _content_text(content)
+        if not text.strip():
+            raise AnalysisError("模型未返回可读取的文本，请检查 OPENAI_PROTOCOL 和模型兼容性后重试。")
+        return text
+    except (AttributeError, KeyError, IndexError, TypeError):
+        raise AnalysisError("模型响应结构与所选协议不兼容，请检查 OPENAI_PROTOCOL。") from None
+
+
+def _sse_events(lines: Iterable[str]):
+    event_type = ""
+    data = []
+    for line in chain(lines, ("",)):
+        if line:
+            field, _, value = line.partition(":")
+            if field == "data":
+                data.append(value.removeprefix(" "))
+            elif field == "event":
+                event_type = value.strip()
+            continue
+        if data:
+            raw = "\n".join(data)
+            if raw.strip() == "[DONE]":
+                yield "done", {}
+            else:
+                try:
+                    value = json.loads(raw)
+                except json.JSONDecodeError:
+                    raise AnalysisError("模型流式响应格式不正确，请检查接口兼容性后重试。") from None
+                if not isinstance(value, dict):
+                    raise AnalysisError("模型流式响应格式不正确，请检查接口兼容性后重试。")
+                yield value.get("type") or event_type, value
+        event_type, data = "", []
+
+
+def _stream_text(lines: Iterable[str], protocol: str) -> str:
+    parts = []
+    result = {}
+    finished = False
+    try:
+        for event_type, event in _sse_events(lines):
+            if event.get("error") or event_type in ("error", "response.failed"):
+                raise AnalysisError("模型服务在生成回答时返回错误，请稍后重试。")
+            if protocol == "chat":
+                if event_type == "done":
+                    finished = True
+                    break
+                choices = event.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                delta = choice.get("delta") or {}
+                parts.append(_content_text(delta.get("content")))
+                if delta.get("refusal"):
+                    result["refusal"] = True
+                if choice.get("finish_reason"):
+                    result["finish_reason"] = choice["finish_reason"]
+                    finished = True
+            elif protocol == "responses":
+                if event_type == "response.output_text.delta":
+                    if not isinstance(event.get("delta"), str):
+                        raise TypeError
+                    parts.append(event["delta"])
+                elif event_type in ("response.completed", "response.incomplete"):
+                    result = event.get("response") or {}
+                    result["status"] = event_type.removeprefix("response.")
+                    finished = True
+                    break
+            else:
+                if event_type == "message_start":
+                    parts.append(_content_text(event["message"].get("content")))
+                elif event_type == "content_block_start":
+                    parts.append(_content_text([event["content_block"]]))
+                elif event_type == "content_block_delta" and event["delta"].get("type") == "text_delta":
+                    parts.append(event["delta"]["text"])
+                elif event_type == "message_delta":
+                    result["stop_reason"] = event["delta"].get("stop_reason")
+                elif event_type == "message_stop":
+                    finished = True
+                    break
+        if not finished:
+            raise AnalysisError("模型流式响应中断，回答未完整生成，请重试。")
+        text = "".join(parts)
+        if protocol == "chat":
+            result = {"choices": [{"finish_reason": result.get("finish_reason"),
+                                   "message": {"content": text, "refusal": result.get("refusal")}}]}
+        elif protocol == "responses":
+            if not result.get("output_text") and not any(item.get("type") == "message"
+                                                         for item in result.get("output", [])):
+                result["output_text"] = text
+        else:
+            result["content"] = [{"type": "text", "text": text}]
+        return _response_text(result, protocol)
+    except (AttributeError, KeyError, IndexError, TypeError):
+        raise AnalysisError("模型流式响应结构与所选协议不兼容，请检查 OPENAI_PROTOCOL。") from None

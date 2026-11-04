@@ -60,7 +60,11 @@ PostgreSQL、RabbitMQ、API 不映射宿主机公网端口。服务由 `paperlen
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-flash
+OPENAI_PROTOCOL=chat
+OPENAI_STREAM=false
 ```
+
+`OPENAI_PROTOCOL` 支持 `chat`、`responses`、`messages`，分别对应 Chat Completions、Responses、Anthropic Messages；均使用 `OPENAI_API_KEY` 和 `OPENAI_MODEL`。`OPENAI_STREAM=true` 启用上游 SSE，完整接收后再校验和保存。根地址与完整接口地址均可填写，网关前缀会保留；具体地址规则和兼容重试见 [模型配置](../README.md#模型配置)。新增变量不填时保持原有 Chat 非流式方式。
 
 没有密钥时页面明确提示模型尚未配置，不能提交分析，不生成模拟结果。修改配置后按服务器权限文档重建 API / Worker / Beat。密钥不写入仓库或 Actions 日志。
 

@@ -553,6 +553,7 @@ dependencies = [
     { name = "boto3" },
     { name = "celery" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "openai" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pymupdf" },
@@ -564,7 +565,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -575,6 +575,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.37,<2" },
     { name = "celery", specifier = ">=5.5,<6" },
     { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "openai", specifier = "==2.54.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pymupdf", specifier = "==1.28.2" },
@@ -586,7 +587,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "pytest", specifier = "==9.2.0" },
     { name = "ruff", specifier = ">=0.11,<1" },
 ]
