@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import * as Drawer from "@radix-ui/react-dialog";
 import {
   BookOpen,
@@ -193,9 +193,19 @@ function AdminOnly() {
   return <Invites />;
 }
 
+function PageStart() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    if (window.scrollX || window.scrollY)
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <BrowserRouter>
+      <PageStart />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>

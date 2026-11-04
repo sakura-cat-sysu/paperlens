@@ -166,6 +166,7 @@ test("guest entry → analysis → logout and resume keeps the same files and qu
   });
   await page.getByRole("button", { name: "一键游客体验" }).click();
   await expect(page).toHaveURL(/\/new$/);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect(
     page.getByRole("complementary", { name: "游客空间与额度" }),
   ).toContainText("10 / 10");
