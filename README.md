@@ -83,7 +83,7 @@ uv run celery -A backend.worker:celery worker --loglevel=WARNING --concurrency=2
 npm --prefix frontend run dev
 ```
 
-浏览器打开 **http://127.0.0.1:5188**。前端开发服务代理 `/api` 到本机 API，无需跨域配置。域名必须和 `APP_ORIGIN` 一致。
+浏览器打开 [本地开发地址](http://127.0.0.1:5188)。前端开发服务代理 `/api` 到本机 API，无需跨域配置。域名必须和 `APP_ORIGIN` 一致。
 
 另开终端运行派发器，负责在队列临时断连后继续投递数据库中的待执行任务：
 
