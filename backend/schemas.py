@@ -72,6 +72,7 @@ class UserView(BaseModel):
     id: str
     email: str
     is_admin: bool
+    is_guest: bool = False
 
 
 class AuthView(BaseModel):
@@ -164,6 +165,9 @@ class JobDetail(JobView):
 
 class Capabilities(BaseModel):
     allow_registration: bool
+    allow_guests: bool
+    guest_daily_analyses: int
+    guest_max_documents: int
     invite_required: bool
     model_configured: bool
     max_file_bytes: int

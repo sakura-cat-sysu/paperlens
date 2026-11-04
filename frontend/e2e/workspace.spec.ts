@@ -146,3 +146,69 @@ test("login page fits narrow screens and supports keyboard submission", async ({
     fullPage: true,
   });
 });
+
+test("guest entry → analysis → logout and resume keeps the same files and quota", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/login");
+  await expect(
+    page.getByRole("button", { name: "一键游客体验" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "../artifacts/ui-review/guest-entry-320.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "一键游客体验" }).click();
+  await expect(page).toHaveURL(/\/new$/);
+  await expect(
+    page.getByRole("complementary", { name: "游客空间与额度" }),
+  ).toContainText("10 / 10");
+  await page
+    .getByLabel("上传 PDF 文献")
+    .setInputFiles([
+      path.resolve("../.cache/e2e/paper-1.pdf"),
+      path.resolve("../.cache/e2e/paper-2.pdf"),
+    ]);
+  await expect(page.getByRole("checkbox")).toHaveCount(2);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await page
+    .getByLabel("你想从这些文献中了解什么？")
+    .fill("比较这些文献的效率结果。");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole("button", { name: "开始分析" }).click();
+  await expect(page.getByText("1/1 项回答已生成", { exact: true })).toBeVisible(
+    { timeout: 30000 },
+  );
+  await expect(
+    page.getByRole("complementary", { name: "游客空间与额度" }),
+  ).toContainText("9 / 10");
+  await page.reload();
+  await expect(
+    page.getByText("1/1 项回答已生成", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "退出游客体验" }).click();
+  await expect(
+    page.getByRole("button", { name: "一键游客体验" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "一键游客体验" }).click();
+  await expect(page.getByRole("checkbox")).toHaveCount(2);
+  await expect(
+    page.getByRole("complementary", { name: "游客空间与额度" }),
+  ).toContainText("9 / 10");
+  await page.screenshot({
+    path: "../artifacts/ui-review/guest-resumed-desktop.png",
+    fullPage: true,
+  });
+});

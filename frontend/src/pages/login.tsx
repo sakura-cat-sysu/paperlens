@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { BookOpen, ArrowRight, Quote } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { api, type Schema } from "../api/client";
 import { useAuth } from "../auth";
 import { Button } from "../components/ui/button";
@@ -9,19 +9,39 @@ import { ErrorMessage } from "../components/common";
 
 export function Login() {
   const auth = useAuth();
+  const navigate = useNavigate();
   const [register, setRegister] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>();
+  const [enteringGuest, setEnteringGuest] = useState(false);
+  const [guestError, setGuestError] = useState<unknown>();
   const config = useQuery({
     queryKey: ["capabilities"],
     queryFn: () => api<Schema["Capabilities"]>("/capabilities"),
   });
-  if (auth.user) return <Navigate to="/" replace />;
+  if (auth.user && !auth.user.is_guest) return <Navigate to="/" replace />;
+  async function enterGuest() {
+    setEnteringGuest(true);
+    setGuestError(undefined);
+    setError(undefined);
+    try {
+      const result = await api<Schema["AuthView"]>("/auth/guest", {
+        method: "POST",
+      });
+      auth.accept(result);
+      navigate("/new", { replace: true });
+    } catch (error) {
+      setGuestError(error);
+    } finally {
+      setEnteringGuest(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
     setPending(true);
     setError(undefined);
+    setGuestError(undefined);
     try {
       const result = await api<Schema["AuthView"]>(
         register ? "/auth/register" : "/auth/login",
@@ -42,6 +62,7 @@ export function Login() {
         },
       );
       auth.accept(result);
+      navigate("/", { replace: true });
     } catch (error) {
       setError(error);
     } finally {
@@ -86,9 +107,41 @@ export function Login() {
       </section>
       <section className="login-form-region">
         <form onSubmit={submit} className="login-form">
+          {config.data?.allow_guests && (
+            <>
+              <section className="guest-entry" aria-label="游客体验">
+                <span className="eyebrow">无需注册，即刻体验</span>
+                <h2>从一组示例开始</h2>
+                <p>直接比较中英文论文，查看观点与原文依据。</p>
+                <Button
+                  type="button"
+                  className="mt-5 w-full"
+                  disabled={pending || enteringGuest}
+                  onClick={enterGuest}
+                >
+                  {enteringGuest
+                    ? "正在进入…"
+                    : auth.user?.is_guest
+                      ? "返回游客空间"
+                      : "一键游客体验"}
+                  <ArrowRight size={17} aria-hidden="true" />
+                </Button>
+                <p className="guest-entry-help">
+                  每天 {config.data.guest_daily_analyses} 次分析 ·
+                  独立文献与报告
+                </p>
+                <ErrorMessage error={guestError} />
+              </section>
+              <div className="login-divider">或使用账号登录</div>
+            </>
+          )}
           <span className="eyebrow">你的研究，从这里继续</span>
           <h2>{register ? "创建账号" : "登录文镜"}</h2>
-          <p className="text-secondary">保存文献、分析进度与有据可查的报告。</p>
+          <p className="text-secondary">
+            {auth.user?.is_guest
+              ? "登录后进入正式账号的独立空间，游客资料不会自动转入。"
+              : "保存文献、分析进度与有据可查的报告。"}
+          </p>
           <div className="mt-8 space-y-5">
             <label className="field-label">
               邮箱
@@ -143,7 +196,11 @@ export function Login() {
             )}
           </div>
           <ErrorMessage error={error ?? config.error} />
-          <Button className="mt-6 w-full" disabled={pending}>
+          <Button
+            className="mt-6 w-full"
+            variant={config.data?.allow_guests ? "outline" : "default"}
+            disabled={pending || enteringGuest}
+          >
             {pending ? "正在处理…" : register ? "创建账号并登录" : "登录"}
             <ArrowRight size={17} aria-hidden="true" />
           </Button>

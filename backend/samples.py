@@ -13,7 +13,7 @@ from backend import storage
 from backend.auth import CurrentUser, DB
 from backend.database import StoredDocument, User, identifier
 from backend.schemas import DOCUMENT, SampleCollectionView, SampleImportResult, SamplePaperView
-from backend.settings import settings
+from backend.settings import document_limit
 from pdf_utils import parse_pdf
 
 router = APIRouter(prefix="/samples", tags=["samples"])
@@ -75,7 +75,7 @@ def import_samples(collection_id: str, user: CurrentUser, db: DB):
     count = db.scalar(
         select(func.count()).select_from(StoredDocument).where(StoredDocument.owner_id == user.id)
     )
-    if count + len(pending) > settings().max_documents:
+    if count + len(pending) > document_limit(user):
         raise HTTPException(409, "文献库剩余空间不足，请至少腾出这组示例所需的位置后重试。")
 
     written = []
