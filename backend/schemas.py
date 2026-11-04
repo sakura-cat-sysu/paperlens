@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
@@ -125,6 +126,7 @@ class JobCreate(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     document_ids: list[UUID] = Field(min_length=2, max_length=3)
     submission_id: UUID
+    model_config_id: UUID | None = None
 
     @field_validator("question")
     @classmethod
@@ -178,3 +180,73 @@ class UsageView(BaseModel):
     used: int
     limit: int
     remaining: int
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+class ModelConfigUpdate(BaseModel):
+    name: str = Field(default="", max_length=60)
+    api_key: str = Field(default="", max_length=400)
+    base_url: str = Field(default="", max_length=300)
+    model: str = Field(default="", max_length=120)
+    protocol: str = Field(default="openai", max_length=20)
+
+    @field_validator("base_url")
+    @classmethod
+    def check_base_url(cls, value):
+        value = value.strip().rstrip("/")
+        if not value:
+            return ""
+        parsed = urlparse(value)
+        if (
+            parsed.scheme not in ("https", "http")
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("请填写不含密钥和查询参数的 http(s) API 根地址。")
+        return value
+
+    @field_validator("model", "name")
+    @classmethod
+    def clean_text(cls, value):
+        return value.strip()
+
+    @field_validator("protocol")
+    @classmethod
+    def check_protocol(cls, value):
+        value = (value or "").strip().lower() or "openai"
+        if value not in ("openai", "anthropic"):
+            raise ValueError("接口协议只能选择 OpenAI 兼容或 Anthropic。")
+        return value
+
+
+class ModelConfigView(BaseModel):
+    """模型配置的展示形态。永远不含明文密钥，只给掩码。"""
+
+    id: str | None = None
+    scope: str  # personal / global / environment
+    name: str
+    configured: bool
+    api_key_hint: str
+    base_url: str
+    model: str
+    protocol: str = "openai"
+    updated_at: datetime | None = None
+
+
+class AccountView(BaseModel):
+    user: UserView
+    created_at: datetime
+    usage: UsageView
+    models: list[ModelConfigView]
+    global_models: list[ModelConfigView] = []
+    environment_configured: bool = False
+    default_model: str = ""
+    default_base_url: str = ""
+    default_protocol: str = "openai"

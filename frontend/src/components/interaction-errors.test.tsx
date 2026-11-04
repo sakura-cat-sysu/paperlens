@@ -134,10 +134,25 @@ function analysisApi({
         return json([]);
       case "/api/documents":
         return json(documents);
-      case "/api/capabilities":
+      case "/api/models":
         return configError
           ? json({ detail: "配置暂时不可用。" }, 503)
-          : json({ model_configured: configured });
+          : json(
+              configured
+                ? [
+                    {
+                      id: "c1",
+                      scope: "personal",
+                      name: "主账号",
+                      configured: true,
+                      api_key_hint: "sk-…1234",
+                      base_url: "https://api.deepseek.com",
+                      model: "deepseek-flash",
+                      updated_at: null,
+                    },
+                  ]
+                : [],
+            );
       case "/api/usage":
         return json({ used: 10 - remaining, limit: 10, remaining });
       default:
@@ -158,7 +173,10 @@ async function fillAnalysis() {
 }
 
 test.each([
-  [{ configured: false }, "模型服务尚未配置，请联系管理员。"],
+  [
+    { configured: false },
+    "还没有可用的模型配置，请联系管理员添加全局配置，或左下角账号设置里自行添加。",
+  ],
   [{ remaining: 0 }, "今日次数已用完，额度将在 UTC 零点重置。"],
   [{ configError: true }, "暂时无法读取文献或分析配置，请刷新后重试。"],
 ])(

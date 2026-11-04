@@ -86,6 +86,35 @@ class LoginAttempt(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 
 
+class ModelConfig(Base):
+    """模型服务配置。owner_id 为空表示全局配置，管理员只维护一条；其余是个人配置。
+
+    每个账号可以有多条个人配置，分析时自行选择用哪一条。
+    """
+
+    __tablename__ = "model_configs"
+    __table_args__ = (UniqueConstraint("owner_id", "name"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
+    owner_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(60))
+    api_key_cipher: Mapped[str] = mapped_column(String(1024), default="")
+    api_key_hint: Mapped[str] = mapped_column(String(32), default="")
+    base_url: Mapped[str] = mapped_column(String(300), default="")
+    model: Mapped[str] = mapped_column(String(120), default="")
+    # openai = Chat Completions；anthropic = Messages。
+    protocol: Mapped[str] = mapped_column(String(20), default="openai", server_default="openai")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now, onupdate=now
+    )
+
+    @property
+    def is_global(self) -> bool:
+        return self.owner_id is None
+
+
 class StoredDocument(Base):
     __tablename__ = "documents"
     __table_args__ = (UniqueConstraint("owner_id", "sha256"),)
@@ -117,6 +146,8 @@ class AnalysisJob(Base):
     checkpoints: Mapped[dict] = mapped_column(JSON, default=dict)
     report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     attempts: Mapped[int] = mapped_column(default=1)
+    # 创建任务时选定的模型配置；为空表示按默认顺序回退。
+    model_config_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

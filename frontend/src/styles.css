@@ -445,6 +445,277 @@ input[type="radio"] {
   background: #dce9df;
   color: #16776a;
 }
+.account-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 9px;
+  margin: -6px -8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+.account-main:hover {
+  background: #e7eee8;
+}
+.account-main.is-active {
+  background: #dfece5;
+}
+.account-main:focus-visible {
+  outline: 2px solid #16776a;
+  outline-offset: 2px;
+}
+.account-page {
+  display: grid;
+  max-width: 900px;
+  gap: 38px;
+}
+.account-page > section + section {
+  padding-top: 34px;
+  border-top: 1px solid #dce5df;
+}
+.account-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 22px 28px;
+}
+.section-note {
+  margin-bottom: 20px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #61726c;
+}
+.model-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 13px;
+  color: #61726c;
+}
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #4a5c8a;
+  background: #e6eaf6;
+}
+.config-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.config-empty {
+  padding: 22px 24px;
+  border: 1px dashed #c9d9cf;
+  border-radius: 10px;
+  background: #f7faf7;
+}
+.config-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #243c34;
+}
+.config-empty-help {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #61726c;
+}
+.section-notice {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border: 1px solid #bcdbcd;
+  border-radius: 8px;
+  background: #f2f8f5;
+  font-size: 13px;
+  color: #126959;
+}
+.config-list {
+  display: grid;
+  gap: 10px;
+}
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 18px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+  background: #fff;
+}
+.config-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #243c34;
+}
+.config-meta {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #61726c;
+  overflow-wrap: anywhere;
+}
+.config-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.library-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  margin-top: 24px;
+}
+.toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #243c34;
+}
+.toolbar-field input,
+.toolbar-field select {
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid #cdd9d2;
+  border-radius: 8px;
+  background: #fff;
+  color: #203b36;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+.toolbar-field input {
+  width: 240px;
+  max-width: 70vw;
+}
+.toolbar-field select {
+  min-width: 150px;
+}
+.toolbar-field input:focus,
+.toolbar-field select:focus {
+  outline: 2px solid #16776a;
+  outline-offset: 1px;
+  border-color: #16776a;
+}
+.toolbar-count {
+  padding-bottom: 11px;
+  font-size: 13px;
+  color: #61726c;
+}
+.model-picker {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #dce5df;
+}
+.account-notice {
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px solid #bcdbcd;
+  border-radius: 8px;
+  background: #f2f8f5;
+  font-size: 13px;
+  color: #126959;
+}
+.page-error {
+  max-width: 620px;
+  margin: 48px auto;
+  padding: 32px;
+  border: 1px solid #e6d2cc;
+  border-radius: 14px;
+  background: #fdf7f5;
+  text-align: center;
+}
+.page-error.is-compact {
+  margin: 8px auto;
+  padding: 26px;
+}
+.page-error-icon {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f6e3de;
+  color: #b53e37;
+}
+.page-error h1 {
+  margin-top: 14px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.page-error p {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #61726c;
+}
+.page-error-detail {
+  max-height: 160px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid #e8ddd9;
+  border-radius: 8px;
+  background: #fff;
+  color: #8d3f38;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.page-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+.dialog-head {
+  flex: 0 0 auto;
+  padding-bottom: 16px;
+}
+.dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* 聚焦描边实际外扩 6px（2px 边框 + 4px 偏移），四周留 8px 才不会被裁切；
+     右侧额外到 12px，给滚动条让位。 */
+  margin: -8px -12px -8px -8px;
+  padding: 8px 12px 8px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #c3d3c9 transparent;
+}
+.dialog-body::-webkit-scrollbar {
+  width: 8px;
+}
+.dialog-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dialog-body::-webkit-scrollbar-thumb {
+  background: #c3d3c9;
+  border-radius: 999px;
+}
+.dialog-body::-webkit-scrollbar-thumb:hover {
+  background: #a9bfb3;
+}
 .content-frame {
   margin-left: 240px;
   min-height: 100dvh;

@@ -4,6 +4,16 @@ import json
 from collections.abc import Callable
 from urllib.parse import urlparse
 
+import anthropic
+from anthropic import (
+    APIConnectionError as AnthropicConnectionError,
+    APIError as AnthropicAPIError,
+    APIStatusError as AnthropicStatusError,
+    APITimeoutError as AnthropicTimeoutError,
+    AuthenticationError as AnthropicAuthError,
+    PermissionDeniedError as AnthropicPermissionError,
+    RateLimitError as AnthropicRateLimitError,
+)
 from openai import (
     APIConnectionError, APIError, APIStatusError, APITimeoutError, AuthenticationError,
     OpenAI, PermissionDeniedError, RateLimitError,
@@ -82,7 +92,7 @@ unresolved_questions 必须是纯字符串数组（例如["哪些条件还需验
 
 
 class LLMService:
-    def __init__(self, settings: Settings, *, client=None):
+    def __init__(self, settings: Settings, *, client=None, anthropic_client=None):
         if settings.missing:
             raise AnalysisError("尚未配置 " + "、".join(settings.missing) + "。请填写项目的 .env 后重试。")
         if settings.base_url:
@@ -94,18 +104,71 @@ class LLMService:
                     or parsed.username or parsed.password or parsed.query or parsed.fragment):
                 raise AnalysisError("OPENAI_BASE_URL 格式无效，请填写不含密钥和查询参数的 http(s) API 根地址。")
         self.settings = settings
-        self.client = client or OpenAI(
-            api_key=settings.api_key, base_url=settings.base_url or None,
-            timeout=settings.timeout_seconds, max_retries=0,
-        )
+        self.client = None
+        self.messages_api = None
+        if settings.protocol == "anthropic":
+            self.messages_api = anthropic_client or anthropic.Anthropic(
+                api_key=settings.api_key, base_url=settings.base_url or None,
+                timeout=settings.timeout_seconds, max_retries=0,
+            )
+        else:
+            self.client = client or OpenAI(
+                api_key=settings.api_key, base_url=settings.base_url or None,
+                timeout=settings.timeout_seconds, max_retries=0,
+            )
 
     def __enter__(self):
         return self
 
     def __exit__(self, *_):
-        self.client.close()
+        if self.client is not None:
+            self.client.close()
+        if self.messages_api is not None:
+            self.messages_api.close()
 
     def _complete(self, messages: list[dict], *, max_output_tokens: int = 4096) -> str:
+        if self.settings.protocol == "anthropic":
+            return self._complete_anthropic(messages, max_output_tokens=max_output_tokens)
+        return self._complete_openai(messages, max_output_tokens=max_output_tokens)
+
+    def _complete_anthropic(self, messages: list[dict], *, max_output_tokens: int = 4096) -> str:
+        system = "\n\n".join(item["content"] for item in messages if item["role"] == "system")
+        dialogue = [item for item in messages if item["role"] != "system"]
+        options = {"model": self.settings.model, "max_tokens": max_output_tokens, "messages": dialogue}
+        if system:
+            options["system"] = system
+        try:
+            response = self.messages_api.messages.create(**options)
+            if getattr(response, "stop_reason", None) == "max_tokens":
+                raise AnalysisError("模型响应因长度限制中断，请缩小文献范围或调整模型服务的输出限制后重试。")
+            text = "".join(
+                block.text for block in response.content if getattr(block, "type", "") == "text"
+            )
+            if not text.strip():
+                raise AnalysisError("模型未返回可读取的文本，请检查模型兼容性后重试。")
+            return text
+        except AnthropicTimeoutError:
+            raise AnalysisError("模型请求超时（单次最多 60 秒）。已完成的文献分析会保留，可点击重试。") from None
+        except (AnthropicAuthError, AnthropicPermissionError):
+            raise AnalysisError("模型鉴权失败或无访问权限，请检查 API Key 和模型权限。") from None
+        except AnthropicRateLimitError:
+            raise AnalysisError("模型服务限流或额度不足，请检查额度，稍后重试。") from None
+        except AnthropicConnectionError:
+            raise AnalysisError("无法连接模型服务，请检查网络和 API 根地址。") from None
+        except AnthropicStatusError as exc:
+            if exc.status_code == 404:
+                message = "模型或接口地址不存在，请检查模型名称和 API 根地址。"
+            elif exc.status_code == 402:
+                message = "模型服务余额不足，请检查账户余额后重试。"
+            elif exc.status_code in (400, 422):
+                message = "模型服务拒绝了请求，请检查模型名称与协议是否匹配。"
+            else:
+                message = f"模型服务暂时不可用（HTTP {exc.status_code}），请稍后重试。"
+            raise AnalysisError(message) from None
+        except AnthropicAPIError:
+            raise AnalysisError("模型服务返回了无法处理的响应，请检查接口兼容性后重试。") from None
+
+    def _complete_openai(self, messages: list[dict], *, max_output_tokens: int = 4096) -> str:
         try:
             options = {}
             if self.settings.is_deepseek:

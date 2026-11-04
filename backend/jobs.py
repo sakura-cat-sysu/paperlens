@@ -10,8 +10,8 @@ from sqlalchemy import func, select
 from backend.auth import CurrentUser, DB
 from backend.database import AnalysisJob, StoredDocument, UsageDay, User, now, owned, session_factory
 from backend.schemas import DOCUMENT, REPORT, JobCreate, JobDetail, JobView, UsageView
+from backend.secrets import SecretError
 from backend.settings import settings
-from config import load_settings
 
 router = APIRouter(tags=["analyses"])
 
@@ -23,7 +23,9 @@ def usage_view(db, user_id):
     return UsageView(used=used, limit=limit, remaining=max(0, limit - used))
 
 
-def reserve_analysis(db, user):
+def reserve_analysis(db, user, config_id: str | None = None):
+    from backend.account import ConfigNotFound, ConfigUnusable, settings_for
+
     db.scalar(select(User).where(User.id == user.id).with_for_update())
     active = db.scalar(
         select(func.count())
@@ -32,8 +34,14 @@ def reserve_analysis(db, user):
     )
     if active >= settings().max_active_jobs:
         raise HTTPException(409, "已有任务正在进行，请等待完成后再开始。")
-    if load_settings().missing:
-        raise HTTPException(503, "模型服务尚未配置，请联系管理员。")
+    try:
+        configured = not settings_for(db, user.id, config_id).missing
+    except ConfigNotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except (ConfigUnusable, SecretError) as exc:
+        raise HTTPException(400, str(exc)) from None
+    if not configured:
+        raise HTTPException(503, "模型服务尚未配置，请在左下角账号设置中添加模型配置。")
     day = now().date()
     usage = db.get(UsageDay, (user.id, day))
     if usage is None:
@@ -101,7 +109,8 @@ def create_job(payload: JobCreate, user: CurrentUser, db: DB):
         return duplicate
     ids = [str(value) for value in payload.document_ids]
     documents = [owned(db, StoredDocument, value, user.id) for value in ids]
-    reserve_analysis(db, user)
+    config_id = str(payload.model_config_id) if payload.model_config_id else None
+    reserve_analysis(db, user, config_id)
     inputs = [
         DOCUMENT.dump_python(
             replace(DOCUMENT.validate_python(document.parsed), document_id=f"D{index}"), mode="json"
@@ -114,6 +123,7 @@ def create_job(payload: JobCreate, user: CurrentUser, db: DB):
         question=payload.question,
         document_ids=ids,
         input_documents=inputs,
+        model_config_id=config_id,
     )
     db.add(job)
     db.commit()
@@ -136,7 +146,7 @@ def retry_job(job_id: str, user: CurrentUser, db: DB):
     retry_reason = retry_block_reason(job, report)
     if retry_reason:
         raise HTTPException(409, retry_reason)
-    reserve_analysis(db, user)
+    reserve_analysis(db, user, job.model_config_id)
     job.status = "queued"
     job.error = ""
     job.progress = "等待重试，已完成阶段会保留"

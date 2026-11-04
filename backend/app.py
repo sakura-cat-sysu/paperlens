@@ -1,19 +1,33 @@
 import logging
+from typing import Annotated
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 
-from backend import admin, auth, documents, jobs, samples
-from backend.auth import DB
-from backend.database import User
+from backend import account, admin, auth, documents, jobs, samples
+from backend.account import has_any_config
+from backend.auth import COOKIE, DB, digest
+from backend.database import LoginSession, User, now
 from backend.schemas import Capabilities
 from backend.settings import settings
 from config import MAX_FILE_BYTES, MAX_PAGES, MAX_QUESTION_CHARS, MAX_TEXT_CHARS, load_settings
 
 app = FastAPI(title="PaperLens API", version="1.0.0", docs_url=None, redoc_url=None)
 logger = logging.getLogger(__name__)
+
+
+def optional_user(request: Request, db: DB) -> User | None:
+    """未登录时返回 None，供公开接口判断「当前访问者」的模型配置。"""
+    token = request.cookies.get(COOKIE, "")
+    session = db.get(LoginSession, digest(token)) if token else None
+    if session is None or session.expires_at <= now():
+        return None
+    return db.get(User, session.user_id)
+
+
+OptionalUser = Annotated[User | None, Depends(optional_user)]
 
 
 @app.middleware("http")
@@ -57,12 +71,16 @@ def ready(db: DB):
 
 
 @app.get("/api/capabilities", response_model=Capabilities, tags=["configuration"])
-def capabilities():
+def capabilities(db: DB, user: OptionalUser):
     config = settings()
+    # 已登录时按该账号实际可用的配置判断；未登录只能看服务器 .env。
+    model_configured = (
+        has_any_config(db, user.id) if user is not None else not load_settings().missing
+    )
     return Capabilities(
         allow_registration=config.allow_registration,
         invite_required=True,
-        model_configured=not load_settings().missing,
+        model_configured=model_configured,
         max_file_bytes=MAX_FILE_BYTES,
         max_pages=MAX_PAGES,
         max_text_chars=MAX_TEXT_CHARS,
@@ -73,6 +91,7 @@ def capabilities():
 
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(account.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(samples.router, prefix="/api")

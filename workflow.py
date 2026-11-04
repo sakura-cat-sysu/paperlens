@@ -17,6 +17,7 @@ def input_signature(documents: tuple[Document, ...], question: str, settings: Se
     payload = {
         "documents": [(d.document_id, d.filename, d.sha256) for d in documents],
         "question": question.strip(), "model": settings.model, "base_url": settings.base_url,
+        "protocol": settings.protocol,
         "credential_fingerprint": hashlib.sha256(settings.api_key.encode()).hexdigest(),
         "prompt_version": 3,
     }

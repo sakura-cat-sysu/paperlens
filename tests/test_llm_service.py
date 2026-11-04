@@ -1,3 +1,6 @@
+import json
+from types import SimpleNamespace
+
 import httpx
 import pytest
 
@@ -76,3 +79,73 @@ def test_missing_configuration():
 def test_bad_base_url(url):
     with pytest.raises(AnalysisError, match="BASE_URL"):
         LLMService(Settings(api_key="test-only", model="test-model", base_url=url))
+
+
+class FakeAnthropic:
+    """只实现 LLMService 用到的两个方法，避免联网。"""
+
+    def __init__(self, outputs):
+        self.calls: list[dict] = []
+        self.closed = False
+        self._outputs = iter(outputs)
+        fake = self
+
+        class Messages:
+            def create(self, **kwargs):
+                fake.calls.append(kwargs)
+                return next(fake._outputs)
+
+        self.messages = Messages()
+
+    def close(self):
+        self.closed = True
+
+
+def test_anthropic_protocol_sends_system_separately(english_pdf):
+    result = single_result("AI improved task completion time in a small sample.")
+    fake = FakeAnthropic([
+        SimpleNamespace(
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="text", text=json.dumps(result, ensure_ascii=False))],
+        )
+    ])
+    service = LLMService(
+        Settings(api_key="test-only", model="claude-x", protocol="anthropic"),
+        anthropic_client=fake,
+    )
+    analysis = service.analyze_document(parse_pdf(english_pdf, "study.pdf", "D1"), "AI efficiency?")
+    assert analysis.claims[0].supported
+    call = fake.calls[0]
+    assert call["model"] == "claude-x"
+    assert call["max_tokens"] == 4096
+    # Messages API 的 system 是独立参数，不能混在对话里。
+    assert "PDF 物理页码" in call["system"]
+    assert all(message["role"] != "system" for message in call["messages"])
+
+
+def test_anthropic_concatenates_text_blocks():
+    fake = FakeAnthropic([
+        SimpleNamespace(
+            stop_reason="end_turn",
+            content=[
+                SimpleNamespace(type="text", text="第一段"),
+                SimpleNamespace(type="tool_use", text=""),
+                SimpleNamespace(type="text", text="第二段"),
+            ],
+        )
+    ])
+    service = LLMService(
+        Settings(api_key="test-only", model="m", protocol="anthropic"),
+        anthropic_client=fake,
+    )
+    assert service._complete([{"role": "user", "content": "问题"}]) == "第一段第二段"
+
+
+def test_anthropic_truncated_response_is_reported():
+    fake = FakeAnthropic([SimpleNamespace(stop_reason="max_tokens", content=[])])
+    service = LLMService(
+        Settings(api_key="test-only", model="m", protocol="anthropic"),
+        anthropic_client=fake,
+    )
+    with pytest.raises(AnalysisError, match="长度限制"):
+        service._complete([{"role": "user", "content": "问题"}])

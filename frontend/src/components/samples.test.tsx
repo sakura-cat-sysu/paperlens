@@ -63,6 +63,19 @@ function setup(entry = "/new", failOnce = false) {
     if (path === "/api/samples") return json([collection]);
     if (path === "/api/documents") return json(imported ? documents : []);
     if (path === "/api/usage") return json({ used: 0, limit: 5, remaining: 5 });
+    if (path === "/api/models")
+      return json([
+        {
+          id: "c1",
+          scope: "personal",
+          name: "主账号",
+          configured: true,
+          api_key_hint: "sk-…1234",
+          base_url: "https://api.deepseek.com",
+          model: "deepseek-flash",
+          updated_at: null,
+        },
+      ]);
     if (path === "/api/capabilities") return json({ model_configured: true });
     if (path === "/api/samples/example/import" && options?.method === "POST") {
       attempts += 1;

@@ -65,29 +65,32 @@ export function Library() {
         <Loading />
       ) : documents.data?.length ? (
         <>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="按文件名筛选…"
-              aria-label="按文件名筛选文献"
-              className="w-full max-w-xs"
-            />
-            <label className="text-sm">
-              排序{" "}
+          <div className="library-toolbar">
+            <div className="toolbar-field">
+              <label htmlFor="library-filter">筛选</label>
+              <input
+                id="library-filter"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="按文件名筛选…"
+                aria-label="按文件名筛选文献"
+              />
+            </div>
+            <div className="toolbar-field">
+              <label htmlFor="library-sort">排序</label>
               <select
+                id="library-sort"
                 value={sort}
                 onChange={(event) => setSort(event.target.value as SortKey)}
-                className="ml-2"
               >
                 <option value="recent">最近添加</option>
                 <option value="name">文件名</option>
                 <option value="size">文件大小</option>
               </select>
-            </label>
+            </div>
             {query.trim() && (
-              <span role="status" className="text-sm text-secondary">
+              <span role="status" className="toolbar-count">
                 找到 {visible.length} 篇
               </span>
             )}

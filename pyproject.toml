@@ -15,6 +15,8 @@ dependencies = [
   "pymupdf==1.28.2",
   "openai==2.54.0",
   "python-dotenv==1.2.4",
+  "cryptography",
+  "anthropic>=2.4.0",
 ]
 
 [dependency-groups]
@@ -22,6 +24,10 @@ dev = ["pytest==9.2.0", "httpx>=0.28,<1", "ruff>=0.11,<1"]
 
 [tool.uv]
 package = false
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

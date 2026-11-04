@@ -9,10 +9,11 @@ from celery import Celery
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
+from backend.account import ConfigNotFound, ConfigUnusable, settings_for
 from backend.database import AnalysisJob, engine, now, session_factory
 from backend.schemas import ANALYSIS, DOCUMENT, PLAN, REPORT
+from backend.secrets import SecretError
 from backend.settings import settings
-from config import load_settings
 from llm_service import AnalysisError
 from workflow import run_workflow
 
@@ -128,7 +129,7 @@ def run_job(session, job_id, *, service=None):
         report = run_workflow(
             documents,
             job.question,
-            load_settings(),
+            settings_for(session, job.owner_id, job.model_config_id),
             cache=PersistentCache(job, session),
             progress=progress,
             service=service,
@@ -141,6 +142,14 @@ def run_job(session, job_id, *, service=None):
         job.status = "failed"
         job.error = str(exc)
         job.progress = "分析未完成，已保存完成的阶段"
+    except SecretError as exc:
+        job.status = "failed"
+        job.error = str(exc)
+        job.progress = "分析未完成，请重新填写模型密钥"
+    except (ConfigNotFound, ConfigUnusable) as exc:
+        job.status = "failed"
+        job.error = str(exc)
+        job.progress = "分析未完成，请重新选择模型配置"
     except Exception as exc:
         session.rollback()
         logger.error("Analysis failed job=%s type=%s", job_id, type(exc).__name__)

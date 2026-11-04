@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -18,6 +18,9 @@ import { Empty, ErrorMessage } from "../components/common";
 import { Button } from "../components/ui/button";
 import { SampleCollections, type SampleImport } from "../components/samples";
 
+const scopeLabel = (scope: string) =>
+  scope === "global" ? "全局" : scope === "environment" ? "服务器" : "个人";
+
 export function NewAnalysis() {
   const location = useLocation();
   const initial = (location.state as { sample?: SampleImport } | null)?.sample;
@@ -29,18 +32,26 @@ export function NewAnalysis() {
   const [question, setQuestion] = useState(initial?.question ?? "");
   const [preview, setPreview] = useState<Document | null>(null);
   const [submission, setSubmission] = useState(crypto.randomUUID());
+  const [configId, setConfigId] = useState("");
   const documents = useQuery({
     queryKey: queryKeys.documents,
     queryFn: () => api<Document[]>("/documents"),
   });
-  const config = useQuery({
-    queryKey: ["capabilities"],
-    queryFn: () => api<Schema["Capabilities"]>("/capabilities"),
+  const models = useQuery({
+    queryKey: queryKeys.models,
+    queryFn: () => api<Schema["ModelConfigView"][]>("/models"),
   });
   const usage = useQuery({
     queryKey: queryKeys.usage,
     queryFn: () => api<Schema["UsageView"]>("/usage"),
   });
+  // 默认选中第一套可用配置，但允许在本次分析里换成别的。
+  useEffect(() => {
+    const options = models.data;
+    if (!options?.length) return;
+    if (options.some((option) => (option.id ?? "") === configId)) return;
+    setConfigId(options[0].id ?? "");
+  }, [models.data, configId]);
   const mutation = useMutation({
     mutationFn: () =>
       api<Job>("/analyses", {
@@ -49,6 +60,7 @@ export function NewAnalysis() {
           question,
           document_ids: selected,
           submission_id: submission,
+          model_config_id: configId || null,
         }),
       }),
     onSuccess: async (job) => {
@@ -70,12 +82,13 @@ export function NewAnalysis() {
     if (!blockedReason && !mutation.isPending) mutation.mutate();
   }
   let blockedReason = "";
-  if (documents.isPending || config.isPending || usage.isPending)
+  if (documents.isPending || models.isPending || usage.isPending)
     blockedReason = "正在读取文献与分析配置，请稍候。";
-  else if (documents.isError || config.isError || usage.isError)
+  else if (documents.isError || models.isError || usage.isError)
     blockedReason = "暂时无法读取文献或分析配置，请刷新后重试。";
-  else if (!config.data?.model_configured)
-    blockedReason = "模型服务尚未配置，请联系管理员。";
+  else if (!models.data?.length)
+    blockedReason =
+      "还没有可用的模型配置，请联系管理员添加全局配置，或左下角账号设置里自行添加。";
   else if (usage.data?.remaining === 0)
     blockedReason = "今日次数已用完，额度将在 UTC 零点重置。";
   else if (selected.length < 2) blockedReason = "请选择至少 2 篇文献。";
@@ -94,7 +107,7 @@ export function NewAnalysis() {
           今日剩余 {usage.data?.remaining ?? "—"} 次
         </span>
       </div>
-      <ErrorMessage error={documents.error ?? config.error ?? usage.error} />
+      <ErrorMessage error={documents.error ?? models.error ?? usage.error} />
       <SampleCollections
         onUse={(sample) => {
           setSelected(sample.document_ids);
@@ -166,6 +179,31 @@ export function NewAnalysis() {
           <p className="mt-2 text-right text-xs text-secondary">
             {question.length} / 2,000
           </p>
+          <div className="model-picker">
+            <label className="field-label" htmlFor="model-config">
+              本次使用的模型配置
+            </label>
+            <select
+              id="model-config"
+              className="mt-2"
+              value={configId}
+              onChange={(event) => setConfigId(event.target.value)}
+              disabled={!models.data?.length}
+            >
+              {models.data?.map((option) => (
+                <option
+                  key={option.id ?? "environment"}
+                  value={option.id ?? ""}
+                >
+                  {scopeLabel(option.scope)} · {option.name}
+                  {option.model ? `（${option.model}）` : ""}
+                </option>
+              ))}
+            </select>
+            <p className="field-help mt-2">
+              不同配置可对应不同账号或服务商。想增加更多，请到「账号设置」。
+            </p>
+          </div>
           <p className="mt-5 text-sm leading-7 text-secondary">
             可以比较结论、分析机制，也可以要求提出待验证的方案。结果会按问题逐项回答，并关联原文证据。
           </p>

@@ -22,6 +22,8 @@ class Settings:
     base_url: str = ""
     model: str = ""
     timeout_seconds: float = 60.0
+    # openai = Chat Completions（兼容绝大多数服务商）；anthropic = Messages。
+    protocol: str = "openai"
 
     @property
     def is_deepseek(self) -> bool:
@@ -51,4 +53,5 @@ def load_settings() -> Settings:
         api_key=read("OPENAI_API_KEY"),
         base_url=read("OPENAI_BASE_URL"),
         model=read("OPENAI_MODEL"),
+        protocol=read("OPENAI_PROTOCOL") or "openai",
     )
