@@ -11,15 +11,15 @@ from backend.auth import CurrentUser, DB
 from backend.database import AnalysisJob, StoredDocument, UsageDay, User, now, owned, session_factory
 from backend.schemas import DOCUMENT, REPORT, JobCreate, JobDetail, JobView, UsageView
 from backend.secrets import SecretError
-from backend.settings import settings
+from backend.settings import analysis_limit, settings
 
 router = APIRouter(tags=["analyses"])
 
 
-def usage_view(db, user_id):
-    usage = db.get(UsageDay, (user_id, now().date()))
+def usage_view(db, user):
+    usage = db.get(UsageDay, (user.id, now().date()))
     used = usage.used if usage else 0
-    limit = settings().daily_analyses
+    limit = analysis_limit(user)
     return UsageView(used=used, limit=limit, remaining=max(0, limit - used))
 
 
@@ -32,7 +32,8 @@ def reserve_analysis(db, user, config_id: str | None = None):
         .select_from(AnalysisJob)
         .where(AnalysisJob.owner_id == user.id, AnalysisJob.status.in_(("queued", "running")))
     )
-    if active >= settings().max_active_jobs:
+    active_limit = min(1, settings().max_active_jobs) if user.is_guest else settings().max_active_jobs
+    if active >= active_limit:
         raise HTTPException(409, "已有任务正在进行，请等待完成后再开始。")
     try:
         configured = not settings_for(db, user.id, config_id).missing
@@ -47,8 +48,8 @@ def reserve_analysis(db, user, config_id: str | None = None):
     if usage is None:
         usage = UsageDay(owner_id=user.id, day=day, used=0)
         db.add(usage)
-    if usage.used >= settings().daily_analyses:
-        raise HTTPException(429, "今日分析次数已用完，额度将在 UTC 零点重置。")
+    if usage.used >= analysis_limit(user):
+        raise HTTPException(429, "今日分析次数已用完，额度每天北京时间 08:00 重置。")
     usage.used += 1
 
 
@@ -79,7 +80,7 @@ def job_detail(job):
 
 @router.get("/usage", response_model=UsageView)
 def usage(user: CurrentUser, db: DB):
-    return usage_view(db, user.id)
+    return usage_view(db, user)
 
 
 @router.get("/analyses", response_model=list[JobView])

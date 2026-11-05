@@ -79,6 +79,9 @@ def capabilities(db: DB, user: OptionalUser):
     )
     return Capabilities(
         allow_registration=config.allow_registration,
+        allow_guests=config.allow_guests,
+        guest_daily_analyses=config.guest_daily_analyses,
+        guest_max_documents=config.guest_max_documents,
         invite_required=True,
         model_configured=model_configured,
         max_file_bytes=MAX_FILE_BYTES,

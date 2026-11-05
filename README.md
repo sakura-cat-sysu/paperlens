@@ -4,12 +4,22 @@
 
 上传 2～3 篇中英文文字型 PDF，围绕研究问题生成中文分析，查看逐项回答、独立观点、共识、分歧和原文证据。文献、任务进度与报告归属个人账号，刷新浏览器后仍可继续查看。
 
+## 在线体验
+
+**体验站：[paperlens.aktools.cn](https://paperlens.aktools.cn/)** · [代码仓库](https://github.com/sakura-cat-sysu/paperlens)
+
+点击「一键游客体验」，无需注册、邀请码或自行填写 API Key。选择一组中英文示例论文，使用预填的研究问题即可开始分析；也可上传自己的论文。每位游客每天可分析 **10 次**，预览文献与查看报告不消耗次数。服务器已配置模型，额度每天北京时间 08:00 重置。
+
+报告会关联原文引文、PDF 物理页码与页面正文，便于人工核验。引文匹配只说明文字有出处，不保证模型解释、跨文献比较或论文结论本身正确；证据不足时可能只返回草稿，不能替代阅读全文和专业判断。
+
+**团队：630** · 陈详、钟尚民、倪健琛、陈铭谦
+
 ## 技术栈
 
 - **前端**：React、TypeScript、Vite、React Router、TanStack Query、Tailwind CSS、基于 Radix 的 shadcn 风格组件。
 - **后端**：FastAPI、Pydantic、SQLAlchemy、Alembic，Python 3.12～3.14。
 - **后台分析**：Celery + RabbitMQ，PostgreSQL 保存任务、阶段检查点和报告。
-- **文献与模型**：PyMuPDF、OpenAI Python SDK，支持 DeepSeek 等 Chat Completions 兼容服务。
+- **文献与模型**：PyMuPDF、OpenAI Python SDK 传输层，支持 Chat Completions、Responses、Anthropic Messages，以及普通 JSON 和 SSE 流式响应。
 - **存储**：私有 S3 兼容对象存储，或单机持久卷；数据库保存解析正文与报告快照。
 - **部署**：Nginx + HTTPS + Docker Compose；GitHub Actions 检查 `main` 后传送源码归档，服务器使用国内源构建并按本机镜像 ID 部署。
 
@@ -32,7 +42,15 @@ uv run python -m backend.cli create-admin you@example.com
 
 ## 账号与邀请码
 
-账号分管理员和普通用户两种。管理员可以签发注册邀请码，普通用户只能使用自己的文献与分析。
+正式账号分管理员和普通用户两种。管理员可以签发注册邀请码，普通用户只能使用自己的文献与分析。
+
+登录页提供「一键游客体验」，无需邮箱、密码或邀请码，直接进入可选用中英文示例的新建分析页。每位游客独立保存文献与报告，每天可分析 **10 次**，文献库最多 10 篇，同一时间最多运行 1 个任务；普通账号默认每天 20 次。额度由后端按账号计数，开始分析和手动重试各计一次，重复提交同一任务不会重复扣次；导入示例、预览原文和查看报告不扣次。额度每天 UTC 00:00（北京时间 08:00）重置。
+
+同一浏览器通过独立的 HttpOnly 标识恢复游客身份，退出再进入不会重置当天额度。标识保存 30 天，再次进入时续期；清除浏览器数据或标识过期后可能无法找回资料。游客资料不会自动转入正式账号。游客使用与正式账号相同的会话、CSRF 和资源归属校验，只能操作自己的内容，不能管理邀请码。
+
+生产默认开放游客体验，无需修改现有生产配置即可随部署启用。可设置 `ALLOW_GUESTS=false` 暂停游客入口和已登录游客的资源访问；`GUEST_DAILY_ANALYSES=10`、`GUEST_MAX_DOCUMENTS=10` 调整游客额度与容量，普通账号仍由 `DAILY_ANALYSES` 和 `MAX_DOCUMENTS` 控制。同一来源网络默认每 15 分钟最多创建 30 个新游客（`GUEST_ENTRIES_PER_WINDOW`），已有游客返回不占创建次数。来源地址由部署代理覆盖转发并由数据库锁共享计数；清除所有浏览器数据会丢失原标识，因此匿名额度不能等同实名防刷。共用网络的大规模评审可由管理员适当调高创建上限。
+
+游客能在模型未配置时进入、选用和预览示例，但生成分析仍需要服务器配置模型；模型未配置时不会创建任务或扣减次数。
 
 注册需要同时满足两个条件：`ALLOW_REGISTRATION=true`，且提交一个仍然可用的邀请码。邀请码只在数据库保存 SHA-256 摘要和 `XX****XX` 形式的掩码，明文仅在签发响应里返回一次，之后无法再次读取。单个邀请码可设置可用次数、有效期，以及注册后是否直接成为管理员；占用时使用行锁，并发注册不会超额使用。
 
@@ -65,7 +83,7 @@ uv run celery -A backend.worker:celery worker --loglevel=WARNING --concurrency=2
 npm --prefix frontend run dev
 ```
 
-浏览器打开 **http://127.0.0.1:5188**。前端开发服务代理 `/api` 到本机 API，无需跨域配置。域名必须和 `APP_ORIGIN` 一致。
+浏览器打开 [本地开发地址](http://127.0.0.1:5188)。前端开发服务代理 `/api` 到本机 API，无需跨域配置。域名必须和 `APP_ORIGIN` 一致。
 
 另开终端运行派发器，负责在队列临时断连后继续投递数据库中的待执行任务：
 
@@ -83,11 +101,27 @@ uv run celery -A backend.worker:celery beat --loglevel=WARNING --schedule=.cache
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-flash
+OPENAI_PROTOCOL=chat
+OPENAI_STREAM=false
 ```
 
-`OPENAI_` 是兼容 SDK 的变量前缀，不代表一定调用 OpenAI。`BASE_URL` 使用 API 根地址，不追加 `/chat/completions`。系统环境变量优先于 `.env`。
+`OPENAI_` 是模型配置的统一前缀，不代表一定调用 OpenAI。系统环境变量优先于 `.env`；未填写新增配置时沿用 `chat` 和非流式请求。
 
-DeepSeek 官方域名下明确关闭思考模式，拆解与单篇阶段最多输出 4,096 tokens，综合阶段最多 8,192 tokens；其他兼容服务不会收到这些专用参数。SDK 自动重试关闭，结构错误最多修复一次。更新配置后重启 API 和 Worker。
+| `OPENAI_PROTOCOL` | 接口 | 鉴权 | 未填写 `OPENAI_BASE_URL` 时的根地址 |
+| --- | --- | --- | --- |
+| `chat` | Chat Completions | Bearer API Key | `https://api.openai.com/v1` |
+| `responses` | Responses | Bearer API Key | `https://api.openai.com/v1` |
+| `messages` | Anthropic Messages | `x-api-key` | `https://api.anthropic.com/v1` |
+
+`OPENAI_BASE_URL` 可填站点根地址、带网关前缀的根地址、含 `/v1` 的地址或完整接口地址。普通根地址自动补 `/v1`；完整地址去掉接口后缀再按所选协议拼接，保留原有路径。例如 `https://gateway.example/coding` 会请求 `/coding/v1/...`，`https://gateway.example/custom/messages` 保留 `/custom`。DeepSeek 官方根地址继续直接请求 `/chat/completions`，也支持 `/v1`。
+
+`OPENAI_STREAM=true` 启用上游流式请求。服务会逐块接收 SSE，过滤思考内容，并在完整结束后执行 JSON、结构和引文校验；页面继续显示阶段进度。服务商即使返回与请求方式不同的 JSON / SSE，也可自动识别。流中错误、截断或未结束的回答不会作为阶段结果保存。
+
+所有协议在拆解与单篇阶段最多输出 4,096 tokens，综合阶段最多输出 8,192 tokens。仅在 DeepSeek 官方域名的 Chat 接口下发送关闭思考的专用参数。Responses 请求设置 `store=false`。
+
+SDK 自动重试关闭。只有服务明确以 HTTP 400 / 422 拒绝 `max_completion_tokens` 或要求流式时，才分别切换为 `max_tokens`、`stream=true`；每次请求最多两次兼容调整，其他 API 错误不重试。结构错误仍最多修复一次，引文不匹配不触发修复。切换协议会使用独立检查点，仅改变流式开关可复用已有结果。
+
+本地开发修改 `.env` 后重启 API、Worker 和派发器。生产环境通过 Compose 注入环境变量，修改服务器配置后需重新创建 `api`、`worker`、`scheduler` 容器；单纯重启不会载入更新后的环境变量，操作方式见 [服务器权限与运维说明](docs/server-access.md)。密钥只由服务器管理员配置，不提交到仓库。
 
 未配置模型时，页面会明确提示，不能创建分析任务，也不会生成模拟报告。测试响应仅存在于测试与浏览器测试脚本中。
 
@@ -97,7 +131,7 @@ DeepSeek 官方域名下明确关闭思考模式，拆解与单篇阶段最多�
 
 示例按账号分别保存，预览和删除不会影响其他用户。论文原文、作者、出处、CC BY 4.0 许可与文件校验值保留在 [示例来源说明](backend/sample_assets/NOTICE.md)；界面也提供原文来源与授权链接。发布包随附 PDF，不依赖评委体验时再从外部网站下载。
 
-1. 登录账号，添加 PDF 到文献库，可按页检查提取正文。
+1. 点击「一键游客体验」或登录正式账号，选用示例或添加 PDF，可按页检查提取正文。
 2. 新建分析，选择 2～3 篇不同文献并输入研究问题。
 3. 提交后拿到独立任务，离开或刷新页面不会重新创建任务。
 4. 任务完成后查看综合结论、逐项回答、文献观点、共识与分歧。

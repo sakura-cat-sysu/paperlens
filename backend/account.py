@@ -79,7 +79,7 @@ def _settings_from(row: ModelConfig) -> Settings:
         api_key=decrypt(row.api_key_cipher),
         base_url=(row.base_url or "").strip() or environment.base_url,
         model=(row.model or "").strip() or environment.model,
-        protocol=(row.protocol or "openai"),
+        protocol=(row.protocol or "chat"),
     )
 
 
@@ -115,7 +115,7 @@ def _view(row: ModelConfig, scope: str) -> ModelConfigView:
         api_key_hint=row.api_key_hint,
         base_url=row.base_url,
         model=row.model,
-        protocol=row.protocol or "openai",
+        protocol=row.protocol or "chat",
         updated_at=row.updated_at,
     )
 
@@ -154,7 +154,7 @@ def _apply(row: ModelConfig, payload: ModelConfigUpdate) -> None:
         row.api_key_hint = hint(key)
     row.base_url = (payload.base_url or "").strip()
     row.model = (payload.model or "").strip()
-    row.protocol = payload.protocol or "openai"
+    row.protocol = payload.protocol or "chat"
 
 
 def _require_key(payload: ModelConfigUpdate, row: ModelConfig | None = None) -> None:
@@ -170,13 +170,13 @@ def account_view(session: Session, user: User) -> AccountView:
     return AccountView(
         user=UserView.model_validate(user),
         created_at=user.created_at,
-        usage=usage_view(session, user.id),
+        usage=usage_view(session, user),
         models=[_view(item, "personal") for item in personal_configs(session, user.id)],
         global_models=[_view(item, "global") for item in global_configs(session)],
         environment_configured=not environment.missing,
         default_model=environment.model or DEFAULT_MODEL,
         default_base_url=environment.base_url,
-        default_protocol=environment.protocol or "openai",
+        default_protocol=environment.protocol or "chat",
     )
 
 

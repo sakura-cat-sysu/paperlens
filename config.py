@@ -22,8 +22,20 @@ class Settings:
     base_url: str = ""
     model: str = ""
     timeout_seconds: float = 60.0
-    # openai = Chat Completions（兼容绝大多数服务商）；anthropic = Messages。
-    protocol: str = "openai"
+    protocol: str = "chat"
+    stream: bool = False
+
+    @property
+    def api_base_url(self) -> str:
+        base = self.base_url.rstrip("/") or (
+            "https://api.anthropic.com/v1" if self.protocol == "messages" else "https://api.openai.com/v1"
+        )
+        for endpoint in ("/chat/completions", "/responses", "/messages"):
+            if base.endswith(endpoint):
+                return base[:-len(endpoint)]
+        if self.is_deepseek or base.endswith("/v1"):
+            return base
+        return base + "/v1"
 
     @property
     def is_deepseek(self) -> bool:
@@ -49,9 +61,13 @@ def load_settings() -> Settings:
     def read(name):
         return (os.environ.get(name, values.get(name)) or "").strip()
 
+    stream = read("OPENAI_STREAM").lower()
+    if stream not in ("", "false", "true", "0", "1"):
+        raise ValueError("OPENAI_STREAM 必须是 true 或 false。")
     return Settings(
         api_key=read("OPENAI_API_KEY"),
         base_url=read("OPENAI_BASE_URL"),
         model=read("OPENAI_MODEL"),
-        protocol=read("OPENAI_PROTOCOL") or "openai",
+        protocol=read("OPENAI_PROTOCOL").lower() or "chat",
+        stream=stream in ("true", "1"),
     )

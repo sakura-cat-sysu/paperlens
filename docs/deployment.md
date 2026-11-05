@@ -54,13 +54,19 @@ PostgreSQL、RabbitMQ、API 不映射宿主机公网端口。服务由 `paperlen
 
 生产配置为 `/opt/paperlens/.env`，0600，归服务账号所有。数据库与队列使用不同随机密码，公开注册关闭，初始文件存储为私有持久卷。
 
+游客体验默认开启，由新增数据库迁移建立独立游客身份及来源创建限流表，原有账号保持普通账号属性。生产未配置新变量时按游客每天 10 次、普通账号每天 20 次运行；`ALLOW_GUESTS=false` 可关闭游客体验，`GUEST_DAILY_ANALYSES`、`GUEST_MAX_DOCUMENTS` 与 `GUEST_ENTRIES_PER_WINDOW` 可分别调整游客分析次数、文献容量和每来源 15 分钟新建游客上限。额度在 UTC 零点重置。部署流程先执行迁移，再启动新版 API；不要直接启动尚未迁移数据库的新版服务。
+
 模型需要管理员配置：
 
 ```dotenv
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.deepseek.com
 OPENAI_MODEL=deepseek-flash
+OPENAI_PROTOCOL=chat
+OPENAI_STREAM=false
 ```
+
+`OPENAI_PROTOCOL` 支持 `chat`、`responses`、`messages`，分别对应 Chat Completions、Responses、Anthropic Messages；均使用 `OPENAI_API_KEY` 和 `OPENAI_MODEL`。`OPENAI_STREAM=true` 启用上游 SSE，完整接收后再校验和保存。根地址与完整接口地址均可填写，网关前缀会保留；具体地址规则和兼容重试见 [模型配置](../README.md#模型配置)。新增变量不填时保持原有 Chat 非流式方式。
 
 没有密钥时页面明确提示模型尚未配置，不能提交分析，不生成模拟结果。修改配置后按服务器权限文档重建 API / Worker / Beat。密钥不写入仓库或 Actions 日志。
 

@@ -98,7 +98,7 @@ def add_config(
     *,
     model="model-1",
     base_url="https://api.example",
-    protocol="openai",
+    protocol="chat",
 ):
     """owner=None 表示全局配置。"""
     from backend.database import ModelConfig
@@ -219,18 +219,18 @@ def test_has_any_config_reflects_availability(account, session, monkeypatch):
 
 
 def test_protocol_follows_the_selected_config(account, session):
-    openai_row = add_config(session, "user-1", "OpenAI", "sk-a-0001", protocol="openai")
+    chat_row = add_config(session, "user-1", "Chat", "sk-a-0001", protocol="chat")
     anthropic_row = add_config(
-        session, "user-1", "Claude", "sk-ant-0002", protocol="anthropic"
+        session, "user-1", "Claude", "sk-ant-0002", protocol="messages"
     )
-    assert account.settings_for(session, "user-1", openai_row.id).protocol == "openai"
+    assert account.settings_for(session, "user-1", chat_row.id).protocol == "chat"
     assert (
         account.settings_for(session, "user-1", anthropic_row.id).protocol
-        == "anthropic"
+        == "messages"
     )
     # 视图里也带上协议，界面才能显示。
     view = account._view(anthropic_row, "personal")
-    assert view.protocol == "anthropic"
+    assert view.protocol == "messages"
 
 
 def test_broken_cipher_is_reported(account, session):

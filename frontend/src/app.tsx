@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import * as Drawer from "@radix-ui/react-dialog";
 import {
   BookOpen,
@@ -26,6 +26,7 @@ import { Button } from "./components/ui/button";
 import { AccountPage } from "./components/account";
 import { ErrorBoundary } from "./components/error-boundary";
 import { ErrorMessage } from "./components/common";
+import { GuestNotice } from "./components/guest-notice";
 import { Login } from "./pages/login";
 import { Workspace } from "./pages/workspace";
 import { NewAnalysis } from "./pages/new-analysis";
@@ -100,28 +101,40 @@ function Shell() {
           </p>
         </div>
         <div className="account">
-          <Link
-            to="/account"
-            className={`account-main ${location.pathname === "/account" ? "is-active" : ""}`}
-            onClick={() => setMenu(false)}
-            aria-current={location.pathname === "/account" ? "page" : undefined}
-          >
-            <span className="avatar">{auth.user.email[0].toUpperCase()}</span>
-            <span className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-xs font-medium">
-                {auth.user.email}
+          {auth.user.is_guest ? (
+            <>
+              <span className="avatar">G</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">游客体验</p>
+                <p className="mt-1 text-xs text-secondary">此浏览器独立空间</p>
+              </div>
+            </>
+          ) : (
+            <Link
+              to="/account"
+              className={`account-main ${location.pathname === "/account" ? "is-active" : ""}`}
+              onClick={() => setMenu(false)}
+              aria-current={
+                location.pathname === "/account" ? "page" : undefined
+              }
+            >
+              <span className="avatar">{auth.user.email[0].toUpperCase()}</span>
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-xs font-medium">
+                  {auth.user.email}
+                </span>
+                <span className="mt-1 block text-xs text-secondary">
+                  {auth.user.is_admin ? "管理员" : "普通用户"} · 账号设置
+                </span>
               </span>
-              <span className="mt-1 block text-xs text-secondary">
-                {auth.user.is_admin ? "管理员" : "普通用户"} · 账号设置
-              </span>
-            </span>
-          </Link>
+            </Link>
+          )}
           <Button
             variant="ghost"
             className="px-2"
             onClick={logout}
             disabled={loggingOut}
-            aria-label="退出登录"
+            aria-label={auth.user.is_guest ? "退出游客体验" : "退出登录"}
           >
             <LogOut size={17} aria-hidden="true" />
           </Button>
@@ -172,7 +185,7 @@ function Shell() {
             <span>文献阅读与分析</span>
             <span className="flex items-center gap-2">
               <span className="size-1.5 rounded-full bg-primary" />
-              个人工作空间
+              {auth.user.is_guest ? "游客工作空间" : "个人工作空间"}
             </span>
           </div>
           <main
@@ -181,6 +194,7 @@ function Shell() {
             key={location.pathname}
             tabIndex={-1}
           >
+            <GuestNotice />
             {/* 页面级兜底：单个页面渲染失败时保留侧边栏，方便切走。 */}
             <ErrorBoundary compact>
               <Outlet />
@@ -201,9 +215,19 @@ function AdminOnly() {
   return <Invites />;
 }
 
+function PageStart() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    if (window.scrollX || window.scrollY)
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <BrowserRouter>
+      <PageStart />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>

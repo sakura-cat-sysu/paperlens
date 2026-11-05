@@ -73,6 +73,7 @@ class UserView(BaseModel):
     id: str
     email: str
     is_admin: bool
+    is_guest: bool = False
 
 
 class AuthView(BaseModel):
@@ -166,6 +167,9 @@ class JobDetail(JobView):
 
 class Capabilities(BaseModel):
     allow_registration: bool
+    allow_guests: bool
+    guest_daily_analyses: int
+    guest_max_documents: int
     invite_required: bool
     model_configured: bool
     max_file_bytes: int
@@ -192,7 +196,7 @@ class ModelConfigUpdate(BaseModel):
     api_key: str = Field(default="", max_length=400)
     base_url: str = Field(default="", max_length=300)
     model: str = Field(default="", max_length=120)
-    protocol: str = Field(default="openai", max_length=20)
+    protocol: str = Field(default="chat", max_length=20)
 
     @field_validator("base_url")
     @classmethod
@@ -220,9 +224,9 @@ class ModelConfigUpdate(BaseModel):
     @field_validator("protocol")
     @classmethod
     def check_protocol(cls, value):
-        value = (value or "").strip().lower() or "openai"
-        if value not in ("openai", "anthropic"):
-            raise ValueError("接口协议只能选择 OpenAI 兼容或 Anthropic。")
+        value = (value or "").strip().lower() or "chat"
+        if value not in ("chat", "responses", "messages"):
+            raise ValueError("接口协议只能是 chat、responses 或 messages。")
         return value
 
 
@@ -236,7 +240,7 @@ class ModelConfigView(BaseModel):
     api_key_hint: str
     base_url: str
     model: str
-    protocol: str = "openai"
+    protocol: str = "chat"
     updated_at: datetime | None = None
 
 
@@ -249,4 +253,4 @@ class AccountView(BaseModel):
     environment_configured: bool = False
     default_model: str = ""
     default_base_url: str = ""
-    default_protocol: str = "openai"
+    default_protocol: str = "chat"

@@ -12,6 +12,11 @@ type ModelConfig = Schema["ModelConfigView"];
 type Notice = { where: "personal" | "global" | "password"; text: string };
 type DialogState = { scope: "personal" | "global"; config: ModelConfig | null };
 
+const PROTOCOL_LABELS: Record<string, string> = {
+  chat: "OpenAI 兼容",
+  responses: "OpenAI Responses",
+  messages: "Anthropic",
+};
 const step = (value: number) => String(value).padStart(2, "0");
 
 function ConfigForm({
@@ -46,7 +51,7 @@ function ConfigForm({
       api_key: apiKey,
       base_url: String(fields.get("base_url") ?? ""),
       model: String(fields.get("model") ?? ""),
-      protocol: String(fields.get("protocol") ?? "openai"),
+      protocol: String(fields.get("protocol") ?? "chat"),
     });
   }
 
@@ -89,10 +94,11 @@ function ConfigForm({
             id={`${idPrefix}-protocol`}
             name="protocol"
             className="mt-2"
-            defaultValue={config?.protocol ?? "openai"}
+            defaultValue={config?.protocol ?? "chat"}
           >
-            <option value="openai">OpenAI 兼容（Chat Completions）</option>
-            <option value="anthropic">Anthropic（Messages）</option>
+            <option value="chat">OpenAI 兼容（Chat Completions）</option>
+            <option value="responses">OpenAI Responses</option>
+            <option value="messages">Anthropic（Messages）</option>
           </select>
         </div>
         <div>
@@ -203,7 +209,7 @@ function ConfigSection({
               <div className="min-w-0">
                 <p className="config-name">{item.name}</p>
                 <p className="config-meta">
-                  {item.protocol === "anthropic" ? "Anthropic" : "OpenAI"} ·{" "}
+                  {PROTOCOL_LABELS[item.protocol] ?? item.protocol} ·{" "}
                   {item.model || "未填模型"} ·{" "}
                   {item.configured
                     ? `密钥 ${item.api_key_hint}`

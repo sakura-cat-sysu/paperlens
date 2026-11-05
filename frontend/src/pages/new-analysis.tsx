@@ -90,7 +90,7 @@ export function NewAnalysis() {
     blockedReason =
       "还没有可用的模型配置，请联系管理员添加全局配置，或左下角账号设置里自行添加。";
   else if (usage.data?.remaining === 0)
-    blockedReason = "今日次数已用完，额度将在 UTC 零点重置。";
+    blockedReason = "今日次数已用完，额度每天北京时间 08:00 重置。";
   else if (selected.length < 2) blockedReason = "请选择至少 2 篇文献。";
   else if (selected.length > 3)
     blockedReason = "一次最多选择 3 篇文献，请取消多余选择。";

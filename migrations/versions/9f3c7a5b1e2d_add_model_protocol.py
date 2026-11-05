@@ -13,7 +13,7 @@ depends_on = None
 def upgrade():
     op.add_column(
         'model_configs',
-        sa.Column('protocol', sa.String(length=20), nullable=False, server_default='openai'),
+        sa.Column('protocol', sa.String(length=20), nullable=False, server_default='chat'),
     )
 
 

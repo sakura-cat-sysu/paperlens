@@ -47,7 +47,7 @@ const personal = {
   api_key_hint: "sk-…1234",
   base_url: "https://api.deepseek.com",
   model: "deepseek-flash",
-  protocol: "openai",
+  protocol: "chat",
   updated_at: null,
 };
 
@@ -59,7 +59,7 @@ const globalConfig = {
   api_key_hint: "sk-…9999",
   base_url: "https://api.deepseek.com",
   model: "deepseek-chat",
-  protocol: "openai",
+  protocol: "chat",
   updated_at: null,
 };
 
@@ -73,7 +73,7 @@ function payload(admin: boolean, models = [personal]) {
     environment_configured: true,
     default_model: "deepseek-flash",
     default_base_url: "https://api.deepseek.com",
-    default_protocol: "openai",
+    default_protocol: "chat",
   };
 }
 
@@ -170,13 +170,13 @@ test("adding a personal config posts it and closes the dialog", async () => {
   expect(post?.body).toContain("备用账号");
 });
 
-test("the protocol defaults to OpenAI and can be switched", async () => {
+test("the protocol defaults to chat and can be switched", async () => {
   const calls = stub();
   show(<AccountPage />);
   fireEvent.click(await screen.findByRole("button", { name: "添加配置" }));
   const protocol = await screen.findByLabelText("接口协议");
-  expect(protocol).toHaveValue("openai");
-  fireEvent.change(protocol, { target: { value: "anthropic" } });
+  expect(protocol).toHaveValue("chat");
+  fireEvent.change(protocol, { target: { value: "messages" } });
   fireEvent.change(screen.getByLabelText("API Key"), {
     target: { value: "sk-ant-0001" },
   });
@@ -185,7 +185,7 @@ test("the protocol defaults to OpenAI and can be switched", async () => {
   const post = calls.find(
     (call) => call.url === "/api/account/models" && call.method === "POST",
   );
-  expect(post?.body).toContain('"protocol":"anthropic"');
+  expect(post?.body).toContain('"protocol":"messages"');
 });
 
 test("editing an existing config sends a PUT with its id", async () => {
