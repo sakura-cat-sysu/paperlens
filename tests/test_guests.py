@@ -221,7 +221,8 @@ def test_guest_mode_can_be_disabled_without_disabling_regular_accounts(api_clien
 
 
 def test_guest_model_unavailable_and_preview_do_not_consume_usage(api_client, monkeypatch):
-    from backend import jobs
+    # 模型配置的解析发生在 backend.account，补丁要打在真正读取 .env 的地方。
+    from backend import account
     from dataclasses import replace
 
     enter(api_client)
@@ -229,8 +230,8 @@ def test_guest_model_unavailable_and_preview_do_not_consume_usage(api_client, mo
     assert imported.status_code == 200
     ids = imported.json()["document_ids"]
     assert api_client.get(f"/api/documents/{ids[0]}").status_code == 200
-    config = replace(jobs.load_settings(), api_key="")
-    monkeypatch.setattr(jobs, "load_settings", lambda: config)
+    config = replace(account.load_settings(), api_key="")
+    monkeypatch.setattr(account, "load_settings", lambda: config)
     response = api_client.post("/api/analyses", json={
         "document_ids": ids, "question": "比较研究结论。", "submission_id": str(uuid4()),
     })
